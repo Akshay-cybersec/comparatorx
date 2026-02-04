@@ -22,7 +22,6 @@ import {
   X        // Close Icon
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
-import Pricing from "@/component/Pricing";
 
 // --- IMPORTS FROM YOUR COMPONENT FOLDER ---
 // Ensure these files exist in app/component/ and export default
@@ -106,8 +105,7 @@ function Navbar({ currentView, onViewChange }: { currentView: string, onViewChan
 
   const navItems = [
     { name: "Home", id: "home", type: "view" },
-    { name: "About", id: "about", type: "view" },
-    { name: "Plans & Pricing", id: "search", type: "view" },   
+    { name: "About", id: "about", type: "view" },   
     { name: "Dashboard", href: "/dashboard", type: "link" },
   ];
 
@@ -185,11 +183,7 @@ function Navbar({ currentView, onViewChange }: { currentView: string, onViewChan
 
           {/* --- 3. CTA & ACTIONS --- */}
           <div className="flex items-center gap-3 md:gap-4 pr-1">
-             
-             {/* Desktop: Login Link (Hidden on Mobile) */}
-             <Link href="/login" className="hidden md:block text-sm font-bold text-slate-600 hover:text-[#0D7377] transition-colors px-2">
-               Log in
-             </Link>
+
 
              {/* Desktop: Get Started Button (Hidden on Mobile) */}
              <Link href="/dashboard" className="hidden md:block">
@@ -250,15 +244,6 @@ function Navbar({ currentView, onViewChange }: { currentView: string, onViewChan
                    )}
                  </motion.div>
                ))}
-               
-               {/* Mobile Login Link */}
-               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-                  <Link href="/login" className="block text-xl font-bold text-slate-500 hover:text-[#0D7377] active:scale-95 transition-all mb-4" onClick={() => setIsMobileMenuOpen(false)}>
-                    Log In
-                  </Link>
-               </motion.div>
-
-               <motion.hr initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} className="border-slate-200 my-4" />
                
                {/* MOBILE GET STARTED BUTTON (Added Here) */}
                <Link href="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
