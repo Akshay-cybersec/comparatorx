@@ -19,6 +19,7 @@ import {
   Scale
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
+import Pricing from "@/component/Pricing";
 
 // --- Fonts ---
 const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '700'] });
@@ -50,10 +51,13 @@ export default function LandingPage() {
       {/* --- 5. LIVE STATS --- */}
       <StatsSection />
 
-      {/* --- 6. EXAMPLE PREVIEW --- */}
+      {/* --- 6. PRICING --- */}
+      <Pricing /> 
+
+      {/* --- 7. EXAMPLE PREVIEW --- */}
       <ExamplePreviewSection />
 
-      {/* --- 7. FOOTER --- */}
+      {/* --- 8. FOOTER --- */}
       <Footer />
     </div>
   );
@@ -204,7 +208,7 @@ function HowItWorksSection() {
     <section className="py-20 bg-[#0D7377] text-white overflow-hidden relative">
       <div className="max-w-7xl mx-auto px-6 relative z-10">
         <div className="text-center mb-20">
-          <h2 className={`${dmSans.className} text-3xl md:text-4xl font-bold`}>How Ranger Works</h2>
+          <h2 className={`${dmSans.className} text-3xl md:text-4xl font-bold`}>How ComparatorX Works</h2>
         </div>
         
         <div className="grid md:grid-cols-3 gap-12 relative">
@@ -246,7 +250,7 @@ function USPSection() {
   return (
     <section className="py-20 px-6 max-w-7xl mx-auto">
       <div className="text-center mb-16">
-        <h2 className={`${dmSans.className} text-3xl md:text-4xl font-bold text-[#0D7377]`}>Why Ranger?</h2>
+        <h2 className={`${dmSans.className} text-3xl md:text-4xl font-bold text-[#0D7377]`}>Why ComparatorX?</h2>
       </div>
       <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
         {usps.map((item, idx) => (
@@ -315,7 +319,7 @@ function ExamplePreviewSection() {
             <span className="text-slate-400">Example: Best Phone under 30k</span>
           </h2>
           <p className="text-slate-500 mb-8 leading-relaxed">
-            Ranger puts the top contenders side-by-side, highlighting the winner based on your specific needs (Camera, Battery, or Performance).
+            ComparatorX puts the top contenders side-by-side, highlighting the winner based on your specific needs (Camera, Battery, or Performance).
           </p>
           <button className="text-[#0D7377] font-bold flex items-center gap-2 hover:gap-4 transition-all">
             Try a live search <ArrowRight className="w-4 h-4" />
@@ -327,7 +331,7 @@ function ExamplePreviewSection() {
            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
               <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-200">
                  <span className="font-bold text-slate-700">Comparison Result</span>
-                 <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded">Ranger Choice</span>
+                 <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded">ComparatorX Choice</span>
               </div>
               
               <div className="flex gap-2">
@@ -368,8 +372,8 @@ function Footer() {
     <footer className="bg-[#0D7377] text-white py-12 px-6">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
         <div>
-          <h2 className={`${dmSans.className} text-2xl font-bold mb-2`}>Ranger.</h2>
-          <p className="text-white/60 text-sm">© 2026 Ranger Inc. TSEC Hackathon Project.</p>
+          <h2 className={`${dmSans.className} text-2xl font-bold mb-2`}>ComparatorX.</h2>
+          <p className="text-white/60 text-sm">© 2026 ComparatorX Inc. TSEC Hackathon Project.</p>
         </div>
         
         <div className="flex gap-8 text-sm font-medium text-white/80">
