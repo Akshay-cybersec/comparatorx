@@ -51,6 +51,15 @@ def fetch_transcript(video_id: str, lang: str = "en", text: bool = True) -> Dict
             "cached": True
         }
 
+    # Hardcode-only mode: do not call Supadata if cache is missing.
+    return {
+        "video_id": video_id,
+        "text": "",
+        "segments": [],
+        "error": "transcript_not_cached",
+        "cached": False
+    }
+
     client, err = _client()
     if err:
         return {"video_id": video_id, "text": "", "segments": [], "error": err}
