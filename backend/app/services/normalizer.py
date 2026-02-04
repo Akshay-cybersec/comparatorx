@@ -57,6 +57,43 @@ def normalize_doctors(raw_data):
     return normalized
 
 
+def detect_category(types: list, name: str):
+    text = " ".join(types).lower() + " " + name.lower()
+
+    if "gym" in text:
+        return "gym"
+    if "doctor" in text or "clinic" in text or "hospital" in text:
+        return "doctor"
+
+    return "place"
+
+
+def normalize_places(raw_data):
+    normalized = []
+
+    for d in raw_data:
+        place_id = d.get("place_id")
+        details = get_place_details(place_id)
+
+        opening_hours = details.get("opening_hours", {})
+        types = details.get("types", [])
+        name = d.get("name", "")
+
+        normalized.append({
+            "place_id": place_id,
+            "name": name,
+            "rating": d.get("rating", 0),
+            "user_ratings_total": d.get("user_ratings_total", 0),
+            "address": d.get("vicinity"),
+            "location": d["geometry"]["location"],
+            "open_now": opening_hours.get("open_now", False),
+            "today_timing": get_today_timing(opening_hours),
+            "category": detect_category(types, name),
+            "types": types
+        })
+
+    return normalized
+
 
 def normalize_data(raw_data):
     normalized = []
