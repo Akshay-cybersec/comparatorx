@@ -22,6 +22,7 @@ import {
   X        // Close Icon
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
+import Pricing from "@/component/Pricing";
 
 // --- IMPORTS FROM YOUR COMPONENT FOLDER ---
 // Ensure these files exist in app/component/ and export default
