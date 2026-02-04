@@ -16,25 +16,36 @@ import {
   History,
   Navigation,
   ArrowLeft,
-  Mic
+  Mic,
+  GitCompare // Added for the compare icon
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
 
 const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '700'] });
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600'] });
 
-// --- API Data ---
+// --- FULL HARDCODED API DATA ---
 const API_DATA = [
-  { "id": "1", "name": "Dr. Matthew Young, DDS", "rating": 4.9, "user_ratings_total": 276, "address": "490 Post Street STE 830, San Francisco", "open_now": true, "category": "doctor", "distance": 0.017, "price": 150, "score": 103.4, "reason": "High rating, very close, currently open, trusted by many patients", "img": "https://images.unsplash.com/photo-1629902308162-432f63e13d27?w=400&q=60" },
-  { "id": "2", "name": "Miguel Delgado, M.D.", "rating": 4.9, "user_ratings_total": 134, "address": "450 Sutter Street #2433, San Francisco", "open_now": true, "category": "doctor", "distance": 0.019, "price": 200, "score": 98.4, "reason": "High rating, very close to you, currently open, trusted by many patients", "img": "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=400&q=60" },
-  { "id": "3", "name": "Richard H. Hongo, M.D.", "rating": 5.0, "user_ratings_total": 102, "address": "1100 Van Ness Avenue, San Francisco", "open_now": true, "category": "doctor", "distance": 0.012, "price": 300, "score": 109.5, "reason": "Perfect rating, extremely close, currently open, trusted by many patients", "img": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=400&q=60" },
-  { "id": "4", "name": "San Francisco Plastic Surgery", "rating": 4.6, "user_ratings_total": 103, "address": "1244 Larkin Street, San Francisco", "open_now": true, "category": "doctor", "distance": 0.015, "price": 500, "score": 100.4, "reason": "High rating, very close to you, currently open, trusted by many patients", "img": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=400&q=60" },
-  { "id": "5", "name": "Rupsa R. Yee, M.D.", "rating": 4.8, "user_ratings_total": 95, "address": "1100 Van Ness Avenue, San Francisco", "open_now": true, "category": "doctor", "distance": 0.012, "price": 180, "score": 107.3, "reason": "High rating, very close to you, currently open", "img": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=400&q=60" },
-  { "id": "6", "name": "Heidi Wittenberg, MD", "rating": 4.5, "user_ratings_total": 8, "address": "45 Castro Street, San Francisco", "open_now": true, "category": "doctor", "distance": 0.017, "price": 220, "score": 88.3, "reason": "High rating, very close to you, currently open", "img": "https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=400&q=60" },
-  { "id": "7", "name": "Gold's Gym SF", "rating": 4.5, "user_ratings_total": 500, "address": "1001 Brannan St, San Francisco", "open_now": true, "category": "gym", "distance": 0.025, "price": 80, "score": 95.0, "reason": "Popular choice, great equipment, currently open", "img": "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=400&q=60" },
-  { "id": "8", "name": "Fitness SF - Castro", "rating": 4.7, "user_ratings_total": 320, "address": "2301 Market St, San Francisco", "open_now": true, "category": "gym", "distance": 0.018, "price": 95, "score": 92.5, "reason": "Highly rated, central location, currently open", "img": "https://images.unsplash.com/photo-1571902943202-507ec2618e8f?w=400&q=60" },
-  { "id": "9", "name": "UCSF Otolaryngology", "rating": 2.5, "user_ratings_total": 25, "address": "2380 Sutter St, San Francisco", "open_now": true, "category": "doctor", "distance": 0.023, "price": 120, "score": 65.2, "reason": "Very close to you, currently open", "img": "https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=400&q=60" },
-  { "id": "10", "name": "Barry C Baron, MD", "rating": 3.3, "user_ratings_total": 3, "address": "2100 Webster St, San Francisco", "open_now": false, "category": "doctor", "distance": 0.02, "price": 100, "score": 70.3, "reason": "Because it has very close to you", "img": "https://images.unsplash.com/photo-1612531388300-47350766327e?w=400&q=60" }
+  { "id": "ChIJqRhcpY6AhYARiRbQlfohXjk", "name": "Dr. Matthew Young, DDS", "rating": 4.9, "user_ratings_total": 276, "address": "490 Post Street STE 830, San Francisco", "open_now": true, "category": "doctor", "distance": 0.017, "price": 150, "score": 103.47, "reason": "High rating, very close to you, currently open, trusted by many patients", "img": "https://images.unsplash.com/photo-1629902308162-432f63e13d27?w=400&q=60" },
+  { "id": "ChIJ-0phpY6AhYARE_FYalDygAI", "name": "Miguel Delgado, M.D.", "rating": 4.9, "user_ratings_total": 134, "address": "450 Sutter Street #2433, San Francisco", "open_now": true, "category": "doctor", "distance": 0.019, "price": 200, "score": 98.47, "reason": "High rating, very close to you, currently open, trusted by many patients", "img": "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=400&q=60" },
+  { "id": "ChIJ-fdK9caAhYARVO9yrtogX0w", "name": "Richard H. Hongo, M.D. FACC", "rating": 5.0, "user_ratings_total": 102, "address": "1100 Van Ness Avenue, San Francisco", "open_now": true, "category": "doctor", "distance": 0.012, "price": 300, "score": 109.59, "reason": "High rating, very close to you, currently open, trusted by many patients", "img": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=400&q=60" },
+  { "id": "ChIJyyyMio6AhYARVhFzc-xQrAI", "name": "SF Plastic Surgery: Dr. Usha Rajagopal", "rating": 4.6, "user_ratings_total": 103, "address": "1244 Larkin Street Suite 200, San Francisco", "open_now": true, "category": "doctor", "distance": 0.015, "price": 500, "score": 100.46, "reason": "High rating, very close to you, currently open, trusted by many patients", "img": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=400&q=60" },
+  { "id": "ChIJwZEqFuqAhYARni9P_qStdco", "name": "Rupsa R. Yee, M.D.", "rating": 4.8, "user_ratings_total": 95, "address": "1100 Van Ness Avenue, San Francisco", "open_now": true, "category": "doctor", "distance": 0.012, "price": 180, "score": 107.38, "reason": "High rating, very close to you, currently open", "img": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=400&q=60" },
+  { "id": "ChIJ-fdK9caAhYARrik8Z_HHn2s", "name": "Heidi Wittenberg, MD", "rating": 4.5, "user_ratings_total": 8, "address": "45 Castro Street #324, San Francisco", "open_now": true, "category": "doctor", "distance": 0.017, "price": 220, "score": 88.39, "reason": "High rating, very close to you, currently open", "img": "https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=400&q=60" },
+  { "id": "ChIJYxVpxFmHhYAROSTRVNEmlZY", "name": "UCSF Otolaryngology Clinic", "rating": 2.5, "user_ratings_total": 25, "address": "2380 Sutter Street, San Francisco", "open_now": true, "category": "doctor", "distance": 0.023, "price": 120, "score": 65.27, "reason": "Because it has very close to you, currently open", "img": "https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=400&q=60" },
+  { "id": "ChIJLSWrfVeHhYARNZ7sd0Sj_xs", "name": "Diana Camarillo, MD", "rating": 3.8, "user_ratings_total": 6, "address": "2211 Post Street Ste 404, San Francisco", "open_now": true, "category": "doctor", "distance": 0.021, "price": 140, "score": 75.93, "reason": "Because it has very close to you, currently open", "img": "https://images.unsplash.com/photo-1527613426441-4da17471b66d?w=400&q=60" },
+  { "id": "ChIJqRhcpY6AhYARXTsxlZV_BnU", "name": "David Ehsan MD, DDS", "rating": 4.7, "user_ratings_total": 13, "address": "450 Sutter Street #2230, San Francisco", "open_now": true, "category": "doctor", "distance": 0.019, "price": 190, "score": 89.89, "reason": "Because it has high rating, very close to you, currently open", "img": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400&q=60" },
+  { "id": "ChIJ-fdK9caAhYARpkbyzKa8R0M", "name": "Barry C Baron, MD", "rating": 3.3, "user_ratings_total": 3, "address": "2100 Webster Street #329, San Francisco", "open_now": false, "category": "doctor", "distance": 0.02, "price": 100, "score": 70.32, "reason": "Because it has very close to you", "img": "https://images.unsplash.com/photo-1612531388300-47350766327e?w=400&q=60" },
+  { "id": "ChIJ-fdK9caAhYAROo5Xzv_8y68", "name": "Dr. Nancy L. Carteron, MD", "rating": 5.0, "user_ratings_total": 1, "address": "2100 Webster Street, San Francisco", "open_now": false, "category": "doctor", "distance": 0.02, "price": 250, "score": 85.24, "reason": "Because it has high rating, very close to you", "img": "https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=400&q=60" },
+  { "id": "ChIJLSWrfVeHhYARcz6ZyTF7ZVU", "name": "Dr. Lynda A. Frassetto, MD", "rating": 5.0, "user_ratings_total": 1, "address": "1675 Scott Street, San Francisco", "open_now": false, "category": "doctor", "distance": 0.022, "price": 240, "score": 83.59, "reason": "Because it has high rating, very close to you", "img": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=400&q=60" },
+  { "id": "ChIJsTwLd5OAhYARa1cxe_h8zSc", "name": "James B Stark Corporation", "rating": 3.0, "user_ratings_total": 2, "address": "909 Hyde Street #432, San Francisco", "open_now": false, "category": "doctor", "distance": 0.015, "price": 110, "score": 73.94, "reason": "Because it has very close to you", "img": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=400&q=60" },
+  { "id": "ChIJ-fdK9caAhYARk_iASswx0DI", "name": "Rona Z. Silkiss MD FACS", "rating": 0, "user_ratings_total": 0, "address": "711 Van Ness Avenue #340, San Francisco", "open_now": true, "category": "doctor", "distance": 0.007, "price": 160, "score": 57.36, "reason": "Because it has very close to you, currently open", "img": "https://images.unsplash.com/photo-1551601651-2a8555f1a136?w=400&q=60" },
+  { "id": "ChIJRVbVCqiAhYAROYrvqdyWVwo", "name": "Kind Gabriel M, MD", "rating": 4.5, "user_ratings_total": 29, "address": "45 Castro Street #410, San Francisco", "open_now": true, "category": "doctor", "distance": 0.016, "price": 210, "score": 93.09, "reason": "Because it has high rating, very close to you, currently open", "img": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400&q=60" },
+  { "id": "ChIJ-fdK9caAhYARdFlme99yHr4", "name": "Pacific Eye Associates", "rating": 3.3, "user_ratings_total": 139, "address": "2100 Webster Street # 214, San Francisco", "open_now": true, "category": "doctor", "distance": 0.02, "price": 130, "score": 81.12, "reason": "Because it has very close to you, currently open, trusted by many patients", "img": "https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=400&q=60" },
+  { "id": "ChIJb0629MaAhYARuN3VyqlC3eg", "name": "Catherine Madison, MD", "rating": 5.0, "user_ratings_total": 1, "address": "45 Castro Street #220, San Francisco", "open_now": false, "category": "doctor", "distance": 0.017, "price": 280, "score": 88.73, "reason": "Because it has high rating, very close to you", "img": "https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=400&q=60" },
+  { "id": "ChIJ-fdK9caAhYARzHw7XFcfoOk", "name": "Dr. Eliza H. Mccaw, MD", "rating": 4.5, "user_ratings_total": 2, "address": "2100 Webster Street UNIT 423, San Francisco", "open_now": false, "category": "doctor", "distance": 0.02, "price": 195, "score": 81.46, "reason": "Because it has high rating, very close to you", "img": "https://images.unsplash.com/photo-1551601651-2a8555f1a136?w=400&q=60" },
+  { "id": "ChIJLSWrfVeHhYARdU5fvaBlyow", "name": "Hani Sbitany, M.D.", "rating": 5.0, "user_ratings_total": 2, "address": "1600 Divisadero Street, San Francisco", "open_now": false, "category": "doctor", "distance": 0.022, "price": 310, "score": 84.40, "reason": "Because it has high rating, very close to you", "img": "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=400&q=60" },
+  { "id": "ChIJ-fdK9caAhYARpRyp0pj5drs", "name": "Audrey Koh, MD", "rating": 3.4, "user_ratings_total": 20, "address": "2100 Webster Street UNIT 518, San Francisco", "open_now": true, "category": "doctor", "distance": 0.02, "price": 155, "score": 76.18, "reason": "Because it has very close to you, currently open", "img": "https://images.unsplash.com/photo-1527613426441-4da17471b66d?w=400&q=60" }
 ];
 
 export default function DashboardPage() {
@@ -46,79 +57,41 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [favorites, setFavorites] = useState<string[]>([]);
   
-  // --- Speech Recognition State ---
   const [isListening, setIsListening] = useState(false);
 
-  // --- Multi-language Placeholder Logic ---
   const placeholders = [
-    "Try 'doctor near me' or 'best gym'...",      // English
-    "मेरे पास 'डॉक्टर' या 'बेस्ट जिम' खोजें...",       // Hindi
-    "'माझ्या जवळचे डॉक्टर' किंवा 'सर्वोत्तम जिम' शोधा..." // Marathi
+    "Try 'doctor near me' or 'best gym'...",
+    "मेरे पास 'डॉक्टर' या 'बेस्ट जिम' खोजें...",
+    "'माझ्या जवळचे डॉक्टर' किंवा 'सर्वोत्तम जिम' शोधा..."
   ];
   const [currentPlaceholder, setCurrentPlaceholder] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentPlaceholder((prev) => (prev + 1) % placeholders.length);
-    }, 1000); 
+    }, 2000); 
     return () => clearInterval(interval);
   }, [placeholders.length]);
 
-  // --- Speech Recognition Logic ---
   const startListening = useCallback(() => {
-    // Check for browser support
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    
     if (!SpeechRecognition) {
-      alert("Your browser does not support Speech Recognition. Please use Chrome or Edge.");
+      alert("Your browser does not support Speech Recognition.");
       return;
     }
-
     const recognition = new SpeechRecognition();
-    recognition.continuous = false; // IMPORTANT: Stop after one sentence
-    recognition.interimResults = false; // Only trigger when the user is done speaking
+    recognition.continuous = false;
+    recognition.interimResults = false;
     recognition.lang = 'en-US'; 
-
-    recognition.onstart = () => {
-      setIsListening(true);
-      console.log("Microphone is open. Speak now.");
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-      console.log("Microphone closed.");
-    };
-    
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
     recognition.onresult = (event: any) => {
-      // Get the transcript
-      const transcript = event.results[0][0].transcript;
-      console.log("Speech detected:", transcript);
-      // Update the search query state
-      setSearchQuery(transcript);
+      setSearchQuery(event.results[0][0].transcript);
     };
-    
-    recognition.onerror = (event: any) => {
-      // 'no-speech' happens if you click the button but don't say anything
-      // 'aborted' happens if you click the button again to stop it
-      if (event.error === 'no-speech') {
-        console.warn("No speech was detected. Please try again.");
-      } else if (event.error === 'not-allowed') {
-        alert("Microphone permission denied. Please allow microphone access in your browser settings.");
-      } else if (event.error !== 'aborted') {
-        console.error("Speech recognition error:", event.error);
-      }
-      setIsListening(false);
-    };
-
-    try {
-      recognition.start();
-    } catch (err) {
-      console.error("Speech recognition failed to start:", err);
-      setIsListening(false);
-    }
+    recognition.onerror = () => setIsListening(false);
+    try { recognition.start(); } catch (err) { setIsListening(false); }
   }, []);
 
-  // Filter Drawer States
   const [minRating, setMinRating] = useState(0);
   const [onlyOpen, setOnlyOpen] = useState(false);
   const [maxPrice, setMaxPrice] = useState(1000);
@@ -126,9 +99,7 @@ export default function DashboardPage() {
   const [streetQuery, setStreetQuery] = useState("");
 
   const toggleFavorite = (id: string) => {
-    setFavorites(prev => 
-      prev.includes(id) ? prev.filter(favId => favId !== id) : [...prev, id]
-    );
+    setFavorites(prev => prev.includes(id) ? prev.filter(favId => favId !== id) : [...prev, id]);
   };
 
   const handleCompareDetails = (item: any) => {
@@ -139,20 +110,15 @@ export default function DashboardPage() {
   const filteredItems = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     const street = streetQuery.toLowerCase().trim();
-    
-    let baseItems = activeTab === "favorites" 
-      ? API_DATA.filter(item => favorites.includes(item.id)) 
-      : API_DATA;
-
+    let baseItems = activeTab === "favorites" ? API_DATA.filter(item => favorites.includes(item.id)) : API_DATA;
     return baseItems.filter(item => {
-      const matchesSearch = item.name.toLowerCase().includes(query) || item.address.toLowerCase().includes(query) || (query.includes("doctor") && item.category === "doctor") || (query.includes("gym") && item.category === "gym");
+      const matchesSearch = item.name.toLowerCase().includes(query) || item.address.toLowerCase().includes(query);
       const matchesType = selectedType === "all" || item.category === selectedType;
       const matchesRating = item.rating >= minRating;
       const matchesOpen = onlyOpen ? item.open_now : true;
       const matchesPrice = item.price <= maxPrice;
       const matchesDistance = item.distance <= maxDistance;
       const matchesStreet = street === "" || item.address.toLowerCase().includes(street);
-
       return matchesSearch && matchesType && matchesRating && matchesOpen && matchesPrice && matchesDistance && matchesStreet;
     }).sort((a, b) => b.score - a.score);
   }, [searchQuery, selectedType, minRating, onlyOpen, maxPrice, maxDistance, streetQuery, activeTab, favorites]);
@@ -169,10 +135,21 @@ export default function DashboardPage() {
         <nav className="flex-1 p-4 space-y-2">
           <NavItem icon={<LayoutDashboard />} label="Dashboard" active={activeTab === "dashboard"} sidebarOpen={sidebarOpen} onClick={() => setActiveTab("dashboard")} />
           <NavItem icon={<Heart />} label="Favorites" active={activeTab === "favorites"} sidebarOpen={sidebarOpen} onClick={() => setActiveTab("favorites")} />
-          <NavItem icon={<History />} label="History" sidebarOpen={sidebarOpen} />
+          
+          {/* NEW ITEM ADDED HERE */}
+          <NavItem 
+  icon={<GitCompare />} 
+  label="Compare Multiple" 
+  active={activeTab === "compare"} 
+  sidebarOpen={sidebarOpen} 
+  onClick={() => {
+    setActiveTab("compare"); // Updates the active UI state
+    router.push('/compare'); // Links to app/compare/page.tsx
+  }} 
+/>
+          <NavItem icon={<History />} label="History" active={activeTab === "history"} sidebarOpen={sidebarOpen} onClick={() => setActiveTab("history")} />
         </nav>
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="absolute -right-3 top-24 bg-white border border-slate-200 rounded-full p-1.5 hover:text-[#ff6b6b] shadow-sm">
-          {/* FIXED SYNTAX HERE */}
           {sidebarOpen ? <ChevronLeft size={14}/> : <ChevronRight size={14}/>}
         </button>
       </motion.aside>
@@ -181,23 +158,19 @@ export default function DashboardPage() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="bg-white border-b border-slate-200 px-8 py-4 z-20">
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-4 items-center">
-            {/* SEARCH BAR CONTAINER */}
             <div className="flex-1 relative w-full group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
               <input 
                 type="text" 
                 placeholder={placeholders[currentPlaceholder]} 
-                className="w-full pl-12 pr-14 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-[#0d7377] transition-all font-medium placeholder:transition-opacity placeholder:duration-300" 
+                className="w-full pl-12 pr-14 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-[#0d7377] transition-all font-medium" 
                 value={searchQuery} 
                 onChange={(e) => setSearchQuery(e.target.value)} 
               />
-              {/* MICROPHONE BUTTON */}
               <button 
                 onClick={startListening}
                 className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full transition-all duration-300 ${isListening ? 'text-red-500 bg-red-100 scale-110 shadow-md' : 'text-slate-400 hover:text-[#0d7377] hover:bg-slate-100'}`}
-                title="Click to Speak"
               >
-                {/* Single Mic Icon - Pulses when listening */}
                 <Mic size={20} className={isListening ? "animate-pulse" : ""} />
               </button>
             </div>
@@ -226,8 +199,12 @@ export default function DashboardPage() {
           <div className="max-w-7xl mx-auto">
             <div className="flex justify-between items-end mb-8">
               <div>
-                <h2 className={`text-3xl font-bold text-[#0d7377] ${dmSans.className}`}>{activeTab === "dashboard" ? "Find, Compare, Decide" : "Your Favorites"}</h2>
-                <p className="text-slate-500 font-medium mt-1">{activeTab === "dashboard" ? "Showing verified data for San Francisco area" : "Your hand-picked collection"}</p>
+                <h2 className={`text-3xl font-bold text-[#0d7377] ${dmSans.className}`}>
+                  {activeTab === "dashboard" ? "Find, Compare, Decide" : 
+                   activeTab === "favorites" ? "Your Favorites" : 
+                   activeTab === "compare" ? "Multi-Comparison" : "Activity History"}
+                </h2>
+                <p className="text-slate-500 font-medium mt-1">Showing verified data for San Francisco area</p>
               </div>
               <div className="bg-[#ff6b6b]/10 text-[#ff6b6b] px-4 py-2 rounded-xl text-sm font-black tracking-wide">{filteredItems.length} RESULTS</div>
             </div>
@@ -278,7 +255,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Max Distance ({maxDistance} KM)</label>
-                  <input type="range" min="0.01" max="0.05" step="0.005" className="w-full accent-[#0d7377]" value={maxDistance} onChange={(e) => setMaxDistance(Number(e.target.value))} />
+                  <input type="range" min="0.005" max="0.05" step="0.005" className="w-full accent-[#0d7377]" value={maxDistance} onChange={(e) => setMaxDistance(Number(e.target.value))} />
                 </div>
                 <div>
                   <button onClick={() => setOnlyOpen(!onlyOpen)} className={`w-full p-4 rounded-2xl border-2 flex justify-between items-center transition-all ${onlyOpen ? "border-[#0d7377] bg-[#0d7377]/5" : "border-slate-100"}`}>
@@ -310,14 +287,14 @@ function ItemCard({ item, isFavorite, onFavoriteToggle, onDetailsClick }: { item
       </div>
       <div className="flex-1 px-1">
         <div className="flex justify-between items-start gap-2 mb-3">
-          <h3 className="font-bold text-[#2B2D42] text-base leading-tight line-clamp-1">{item.name}</h3>
+          <h3 className="font-bold text-[#2B2D42] text-sm leading-tight line-clamp-2 h-10">{item.name}</h3>
           <div className="shrink-0 flex flex-col items-end"><div className="bg-[#0d7377]/10 text-[#0d7377] text-[10px] font-black px-2 py-0.5 rounded-lg border border-[#0d7377]/20">{Math.round(item.score)}</div><span className="text-[8px] font-black text-slate-300 mt-0.5">SCORE</span></div>
         </div>
         <div className="space-y-3 mb-4">
           <div className="flex items-start gap-2 text-slate-400"><MapPin size={14} className="mt-0.5 text-[#ff6b6b]" /><p className="text-[11px] font-semibold leading-relaxed line-clamp-1">{item.address}</p></div>
           <div className="flex items-center gap-2 text-[#0d7377] font-black text-[10px] tracking-widest bg-[#0d7377]/5 w-fit px-3 py-1.5 rounded-xl border border-[#0d7377]/10 uppercase"><Navigation size={12} />{item.distance} KM AWAY</div>
         </div>
-        <div className="p-3 bg-[#f8fcfc] rounded-2xl mb-4 border border-[#0d7377]/10"><p className="text-[10px] text-slate-500 font-bold leading-relaxed italic">"{item.reason}"</p></div>
+        <div className="p-3 bg-[#f8fcfc] rounded-2xl mb-4 border border-[#0d7377]/10 h-16 overflow-hidden"><p className="text-[10px] text-slate-500 font-bold leading-relaxed italic line-clamp-2">"{item.reason}"</p></div>
       </div>
       <div className="flex gap-2">
         <button onClick={onDetailsClick} className="flex-1 py-3 bg-[#0d7377] text-white rounded-2xl text-[10px] font-black tracking-widest hover:bg-[#0b5c5f] transition-all hover:shadow-lg shadow-[#0d7377]/20 uppercase">Compare Details</button>
