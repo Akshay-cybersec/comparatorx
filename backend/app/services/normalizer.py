@@ -89,7 +89,8 @@ def normalize_places(raw_data):
             "open_now": opening_hours.get("open_now", False),
             "today_timing": get_today_timing(opening_hours),
             "category": detect_category(types, name),
-            "types": types
+            "types": types,
+            "google_maps_url": f"https://maps.google.com/?q=place_id:{place_id}" if place_id else None
         })
 
     return normalized
