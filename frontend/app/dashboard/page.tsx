@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useRouter } from "next/navigation"; // Added for routing
 import { 
   LayoutDashboard, 
   Smartphone, 
@@ -18,7 +19,8 @@ import {
   X,
   Plus,
   Heart,
-  History
+  History,
+  ArrowLeft 
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
 
@@ -73,10 +75,7 @@ export default function DashboardPage() {
   // Filter Logic (Search + Category)
   const filteredItems = useMemo(() => {
     return MOCK_ITEMS.filter((item) => {
-      // 1. Check if the item matches the selected "Pill" category
       const matchesType = selectedType === "all" || item.type === selectedType;
-      
-      // 2. Check if the search text matches Title, Location, or Item Type
       const query = searchQuery.toLowerCase();
       const matchesSearch = 
         item.title.toLowerCase().includes(query) || 
@@ -225,6 +224,13 @@ export default function DashboardPage() {
                 >
                   <SlidersHorizontal className="w-4 h-4" /> Advanced
                 </button>
+                
+                <button 
+                  onClick={() => window.location.href = '/'} 
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 font-medium hover:border-[#FF6B6B] hover:text-[#FF6B6B] transition-all group"
+                >
+                  <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" /> Back
+                </button>
               </div>
            </div>
         </header>
@@ -245,8 +251,8 @@ export default function DashboardPage() {
            </div>
 
            <motion.div 
-             layout 
-             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+              layout 
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
            >
              <AnimatePresence mode="popLayout">
                {displayedItems.length > 0 ? (
@@ -300,7 +306,6 @@ export default function DashboardPage() {
                 <X className="w-5 h-5 text-slate-500" />
               </button>
             </div>
-            {/* ... Filters content ... */}
             <div className="p-6 space-y-8 overflow-y-auto flex-1">
                <div>
                   <label className="text-sm font-bold text-slate-700 mb-3 block">Price Range</label>
@@ -355,6 +360,8 @@ interface ItemCardProps {
 }
 
 function ItemCard({ item, isSaved, onToggleSave }: ItemCardProps) {
+  const router = useRouter(); // Initialize router
+
   return (
     <motion.div
       layout
@@ -386,7 +393,14 @@ function ItemCard({ item, isSaved, onToggleSave }: ItemCardProps) {
       </div>
 
       <div className="mt-4 flex gap-2">
-        <button className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 group-hover:bg-[#0D7377] group-hover:text-white group-hover:border-[#0D7377] transition-all flex items-center justify-center gap-2">
+        {/* Updated button to link to item/[id]/page.tsx */}
+        <button 
+          onClick={(e) => {
+            e.stopPropagation(); // Prevents triggering card hover/click if applicable
+            router.push(`/item/${item.id}`);
+          }}
+          className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 group-hover:bg-[#0D7377] group-hover:text-white group-hover:border-[#0D7377] transition-all flex items-center justify-center gap-2"
+        >
            Add to Compare <Plus className="w-4 h-4" />
         </button>
         <button 
@@ -401,6 +415,7 @@ function ItemCard({ item, isSaved, onToggleSave }: ItemCardProps) {
           }`}
         >
           <Heart className={`w-5 h-5 ${isSaved ? "fill-[#FF6B6B]" : ""}`} />
+          //heartpage
         </button>
       </div>
     </motion.div>
