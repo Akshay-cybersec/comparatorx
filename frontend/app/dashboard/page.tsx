@@ -1,308 +1,307 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useRouter } from "next/navigation";
 import { 
-  LayoutDashboard, Scale, Bell, Settings, Clock, 
-  Trash2, Share2, Edit2, ArrowRight, TrendingDown, 
-  MapPin, LogOut, Search, CheckCircle, AlertTriangle
+  LayoutDashboard, Smartphone, Stethoscope, Utensils, Search, 
+  ChevronLeft, ChevronRight, SlidersHorizontal, MapPin, Star, 
+  X, Heart, Loader2, Navigation, ArrowRight, Home, RotateCcw
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
 
-// --- Fonts ---
 const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '700'] });
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600'] });
 
-// --- Mock Data ---
-const SAVED_COMPARISONS = [
-  {
-    id: 1,
-    title: "Flagship Phones 2024",
-    items: ["iPhone 15 Pro", "S24 Ultra", "Pixel 8 Pro"],
-    date: "2 days ago",
-    images: ["https://images.unsplash.com/photo-1696446701796-da61225697cc?w=100", "https://images.unsplash.com/photo-1610945265078-38584e26903b?w=100"]
-  },
-  {
-    id: 2,
-    title: "Dentists in Bandra",
-    items: ["SmileCare", "City Dental", "Dr. Ayesha"],
-    date: "1 week ago",
-    images: [] // Empty state test
-  }
+const SEARCH_FILTERS = [
+  { id: "all", label: "All", icon: null },
+  { id: "doctor", label: "Doctors", icon: <Stethoscope className="w-4 h-4" /> },
+  { id: "gadget", label: "Electronics", icon: <Smartphone className="w-4 h-4" /> },
+  { id: "food", label: "Food", icon: <Utensils className="w-4 h-4" /> },
 ];
 
-const PRICE_ALERTS = [
-  {
-    id: 1,
-    item: "Sony WH-1000XM5",
-    target: 24000,
-    current: 26990,
-    status: "active", // active, triggered, paused
-    image: "https://images.unsplash.com/photo-1618366712010-f4ae9c647dcb?w=100"
-  },
-  {
-    id: 2,
-    item: "MacBook Air M2",
-    target: 95000,
-    current: 92000,
-    status: "triggered",
-    image: "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=100"
-  }
-];
-
-const RECENT_SEARCHES = ["Best Gaming Laptop under 80k", "Plumbers near me", "Nike Jordan High"];
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState("comparisons");
+  const router = useRouter();
+  
+  // UI State
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [activeNav, setActiveNav] = useState("overview");
+  
+  // Search State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedType, setSelectedType] = useState("all");
+  
+  // Data State
+  const [items, setItems] = useState<any[]>([]); 
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [savedIds, setSavedIds] = useState<any[]>([]);
+  const [coords, setCoords] = useState({ lat: 19.0760, lng: 72.8777 });
+
+  // Client-Side Filters (Local filtering only)
+  const [minRating, setMinRating] = useState(0);
+
+  // Fetch Location on Mount
+  useEffect(() => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+      );
+    }
+  }, []);
+
+  // --- API ROUTING LOGIC ---
+  const performServerSearch = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      let url: URL;
+      const queryLower = searchQuery.toLowerCase();
+      
+      // Keywords that trigger the product API
+      const productKeywords = ['iphone', 'samsung', 'oneplus', 'pixel', 'laptop', 'macbook', 'sony', 'buds', 'phone', 'camera', 'gadget', '13', '14', '15', '16', '17'];
+      
+      const isProductIntent = selectedType === "gadget" || 
+        (selectedType === "all" && productKeywords.some(key => queryLower.includes(key)));
+
+      if (isProductIntent) {
+        // --- CALL PRODUCT API ---
+        url = new URL(`${BASE_URL}/api/products`);
+        url.searchParams.append("q", searchQuery || "iPhone 16"); 
+      } else {
+        // --- CALL DOCTOR API ---
+        const isAI = searchQuery.trim().split(/\s+/).length >= 3;
+        const endpoint = isAI ? "/api/doctors/ai" : "/api/doctors";
+        url = new URL(`${BASE_URL}${endpoint}`);
+        url.searchParams.append("lat", coords.lat.toString());
+        url.searchParams.append("lng", coords.lng.toString());
+        
+        if (isAI) url.searchParams.append("q", searchQuery);
+        else url.searchParams.append("speciality", searchQuery || "physician");
+      }
+
+      const response = await fetch(url.toString());
+      
+      if (response.status === 422) {
+        throw new Error("FastAPI Error 422: Parameter Mismatch.");
+      }
+      if (!response.ok) throw new Error("Search failed.");
+      
+      const data = await response.json();
+
+      // MAPPING API RESPONSE TO UI
+      const mapped = (data.results || []).map((res: any, i: number) => ({
+        id: res.id || `item-${i}-${Date.now()}`,
+        type: isProductIntent ? "gadget" : "doctor",
+        title: res.name,
+        // Price formatting for products, default for doctors
+        price: res.price ? (typeof res.price === 'number' ? `₹${res.price.toLocaleString()}` : res.price) : "Consultation Varies",
+        rating: res.rating || 0,
+        // Seller for products, Address for doctors
+        loc: res.seller || res.address || "Mumbai",
+        // LLM Summary for products, Reason for doctors
+        reason: isProductIntent ? (data.review_summary || "Top reviewed product") : res.reason,
+        img: isProductIntent 
+          ? "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400" 
+          : "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=400",
+        distance: res.distance || 0
+      }));
+
+      setItems(mapped);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchQuery, selectedType, coords]);
+
+  // --- CLIENT SIDE FILTERING ---
+  const filteredDisplayItems = useMemo(() => {
+    let result = items;
+    if (activeNav === 'saved') result = result.filter(i => savedIds.includes(i.id));
+    if (minRating > 0) result = result.filter(i => i.rating >= minRating);
+    return result;
+  }, [items, activeNav, savedIds, minRating]);
+
+  // Initial Load
+  useEffect(() => { performServerSearch(); }, [coords]);
 
   return (
-    <div className={`min-h-screen bg-[#F8F9FA] text-[#2B2D42] ${inter.className}`}>
+    <div className={`h-screen w-full bg-[#F8FAFC] text-[#1E293B] ${inter.className} flex overflow-hidden`}>
       
-      {/* --- Header --- */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-           <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#0D7377] text-white flex items-center justify-center font-bold text-lg">
-                JD
-              </div>
-              <div>
-                 <h1 className={`text-lg font-bold leading-none ${dmSans.className}`}>Welcome back, John!</h1>
-                 <p className="text-xs text-slate-500">Member since Jan 2026</p>
-              </div>
-           </div>
-           <button className="text-sm font-medium text-slate-500 hover:text-[#FF6B6B] flex items-center gap-2 transition-colors">
-              <LogOut className="w-4 h-4" /> Sign Out
-           </button>
+      {/* SIDEBAR */}
+      <motion.aside animate={{ width: sidebarOpen ? 260 : 80 }} className="h-full bg-white border-r flex flex-col relative z-20 shadow-sm">
+        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="absolute -right-3 top-10 bg-white border rounded-full p-1 shadow-sm hover:text-[#0D7377]">
+          {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </button>
+
+        <div className={`h-20 flex items-center ${sidebarOpen ? "px-6" : "justify-center"} border-b`}>
+          <div className="w-8 h-8 bg-[#0D7377] rounded-lg shrink-0" />
+          {sidebarOpen && <span className={`ml-3 text-lg font-bold text-[#0D7377] ${dmSans.className}`}>ComparatorX</span>}
         </div>
-      </header>
 
-      <div className="max-w-6xl mx-auto px-4 py-8 grid grid-cols-1 md:grid-cols-4 gap-8">
-        
-        {/* --- Sidebar Navigation --- */}
-        <aside className="md:col-span-1">
-           <nav className="space-y-1 sticky top-28">
-              <NavButton active={activeTab === "comparisons"} onClick={() => setActiveTab("comparisons")} icon={<Scale className="w-4 h-4" />} label="Saved Comparisons" />
-              <NavButton active={activeTab === "alerts"} onClick={() => setActiveTab("alerts")} icon={<Bell className="w-4 h-4" />} label="Price Alerts" />
-              <NavButton active={activeTab === "preferences"} onClick={() => setActiveTab("preferences")} icon={<Settings className="w-4 h-4" />} label="Preferences" />
-              
-              <div className="pt-6 mt-6 border-t border-slate-200">
-                 <p className="px-4 text-xs font-bold text-slate-400 uppercase mb-2">Recent Searches</p>
-                 <div className="space-y-1">
-                    {RECENT_SEARCHES.map((s, i) => (
-                       <button key={i} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg flex items-center gap-2 truncate">
-                          <Clock className="w-3 h-3 text-slate-400" /> {s}
-                       </button>
-                    ))}
-                 </div>
+        <nav className="flex-1 p-4 space-y-2">
+          <button onClick={() => router.push("/")} className="w-full flex items-center p-3 rounded-xl text-slate-400 hover:bg-slate-50 transition-colors">
+            <Home className="w-5 h-5" />
+            {sidebarOpen && <span className="ml-3 font-medium text-sm">Back to Home</span>}
+          </button>
+          <button onClick={() => setActiveNav("overview")} className={`w-full flex items-center p-3 rounded-xl ${activeNav === "overview" ? "bg-[#0D7377]/10 text-[#0D7377]" : "text-slate-400"}`}>
+            <LayoutDashboard className="w-5 h-5" />
+            {sidebarOpen && <span className="ml-3 font-medium text-sm">Dashboard</span>}
+          </button>
+          <button onClick={() => setActiveNav("saved")} className={`w-full flex items-center p-3 rounded-xl ${activeNav === "saved" ? "bg-[#0D7377]/10 text-[#0D7377]" : "text-slate-400"}`}>
+            <Heart className="w-5 h-5" />
+            {sidebarOpen && <span className="ml-3 font-medium text-sm">Saved Items</span>}
+          </button>
+        </nav>
+      </motion.aside>
+
+      {/* MAIN CONTENT */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="bg-white border-b px-8 py-4">
+          <div className="max-w-4xl flex flex-col gap-4">
+            
+            <form onSubmit={(e) => { e.preventDefault(); performServerSearch(); }} className="relative group">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5 group-focus-within:text-[#0D7377]" />
+              <input 
+                type="text" 
+                placeholder="Try 'iPhone 17' or 'Dentist in Bandra'..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-12 pr-16 py-3 bg-slate-50 border-2 border-transparent focus:bg-white focus:border-[#0D7377] rounded-2xl outline-none text-sm transition-all"
+              />
+              <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 bg-[#0D7377] text-white px-4 py-1.5 rounded-xl text-xs font-bold shadow-lg shadow-[#0D7377]/20">
+                {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Search"}
+              </button>
+            </form>
+
+            <div className="flex justify-between items-center">
+              <div className="flex gap-2">
+                {SEARCH_FILTERS.map(f => (
+                  <button 
+                    key={f.id} 
+                    onClick={() => { setSelectedType(f.id); }} 
+                    className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-all ${selectedType === f.id ? "bg-[#0D7377] text-white" : "bg-white text-slate-500 hover:border-slate-300"}`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
               </div>
-           </nav>
-        </aside>
+              <button onClick={() => setFilterDrawerOpen(true)} className="flex items-center gap-2 px-4 py-2 border rounded-xl text-xs font-bold text-slate-600 hover:border-[#0D7377]">
+                <SlidersHorizontal className="w-4 h-4" /> Filters
+              </button>
+            </div>
+          </div>
+        </header>
 
-        {/* --- Main Content Area --- */}
-        <main className="md:col-span-3">
-           <AnimatePresence mode="wait">
-              
-              {/* 1. SAVED COMPARISONS */}
-              {activeTab === "comparisons" && (
-                <motion.div 
-                  key="comparisons"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                  className="space-y-6"
-                >
-                   <div className="flex justify-between items-end">
-                      <h2 className={`text-2xl font-bold ${dmSans.className}`}>Saved Comparisons</h2>
-                      <span className="text-sm text-slate-500">{SAVED_COMPARISONS.length} Collections</span>
-                   </div>
+        <main className="flex-1 overflow-y-auto p-8 scrollbar-hide">
+          <div className="mb-8 flex justify-between items-end">
+             <div>
+               <h1 className={`${dmSans.className} text-3xl font-bold text-slate-800`}>
+                 {activeNav === 'saved' ? 'My Collections' : 'Discovery Dashboard'}
+               </h1>
+               <div className="flex items-center gap-2 mt-2 text-[10px] text-slate-400">
+                  <Navigation className="w-3 h-3 text-[#0D7377]" />
+                  GPS: {coords.lat.toFixed(3)}, {coords.lng.toFixed(3)}
+               </div>
+             </div>
+             {error && <div className="text-red-500 text-xs bg-red-50 px-4 py-2 rounded-lg border border-red-100 animate-pulse">{error}</div>}
+          </div>
 
-                   {SAVED_COMPARISONS.length > 0 ? (
-                     <div className="grid sm:grid-cols-2 gap-4">
-                        {SAVED_COMPARISONS.map(comp => (
-                           <div key={comp.id} className="bg-white p-4 rounded-2xl border border-slate-200 hover:border-[#0D7377]/50 hover:shadow-lg transition-all group cursor-pointer">
-                              <div className="flex items-center justify-between mb-3">
-                                 <h3 className="font-bold text-lg group-hover:text-[#0D7377] transition-colors">{comp.title}</h3>
-                                 <div className="flex gap-1">
-                                    <button className="p-1.5 text-slate-400 hover:text-[#0D7377] hover:bg-[#0D7377]/10 rounded"><Edit2 className="w-4 h-4" /></button>
-                                    <button className="p-1.5 text-slate-400 hover:text-[#FF6B6B] hover:bg-[#FF6B6B]/10 rounded"><Trash2 className="w-4 h-4" /></button>
-                                 </div>
-                              </div>
-                              
-                              {/* Thumbnail Grid */}
-                              <div className="flex gap-2 mb-4 h-16">
-                                 {comp.images.length > 0 ? comp.images.slice(0, 3).map((img, i) => (
-                                    <img key={i} src={img} alt="item" className="w-16 h-16 rounded-lg object-cover bg-slate-100" />
-                                 )) : (
-                                    <div className="w-full h-16 bg-slate-50 rounded-lg flex items-center justify-center text-xs text-slate-400">No images</div>
-                                 )}
-                                 <div className="flex-1 bg-slate-50 rounded-lg flex items-center justify-center text-xs font-bold text-slate-500">
-                                    +{comp.items.length} Items
-                                 </div>
-                              </div>
-                              
-                              <div className="flex justify-between items-center text-xs text-slate-400">
-                                 <span>Saved {comp.date}</span>
-                                 <button className="text-[#0D7377] font-bold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                                    View <ArrowRight className="w-3 h-3" />
-                                 </button>
-                              </div>
-                           </div>
-                        ))}
-                     </div>
-                   ) : (
-                     <EmptyState 
-                       icon={<Scale className="w-12 h-12 text-slate-300" />} 
-                       title="No saved comparisons" 
-                       desc="Start searching to compare products side-by-side."
-                     />
-                   )}
-                </motion.div>
-              )}
-
-              {/* 2. PRICE ALERTS */}
-              {activeTab === "alerts" && (
-                <motion.div 
-                  key="alerts"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                  className="space-y-6"
-                >
-                   <h2 className={`text-2xl font-bold ${dmSans.className}`}>Price Alerts</h2>
-                   
-                   <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                      {PRICE_ALERTS.map((alert, i) => (
-                         <div key={alert.id} className={`p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors ${i !== 0 ? 'border-t border-slate-100' : ''}`}>
-                            <img src={alert.image} alt="product" className="w-12 h-12 rounded-lg object-cover bg-slate-100" />
-                            
-                            <div className="flex-1 min-w-0">
-                               <h4 className="font-bold text-[#2B2D42] truncate">{alert.item}</h4>
-                               <div className="flex items-center gap-3 text-sm">
-                                  <span className="text-slate-500">Target: ₹{alert.target.toLocaleString()}</span>
-                                  {alert.current <= alert.target ? (
-                                     <span className="text-[#10B981] font-bold flex items-center gap-1">
-                                        <TrendingDown className="w-3 h-3" /> Now ₹{alert.current.toLocaleString()}
-                                     </span>
-                                  ) : (
-                                     <span className="text-slate-400">Current: ₹{alert.current.toLocaleString()}</span>
-                                  )}
-                               </div>
-                            </div>
-
-                            <div className="flex items-center gap-4">
-                               {alert.status === 'triggered' && (
-                                  <span className="px-3 py-1 bg-[#14FFEC]/20 text-[#0D7377] text-xs font-bold rounded-full border border-[#14FFEC]/50 animate-pulse">
-                                     Price Drop!
-                                  </span>
-                               )}
-                               <button className="text-slate-400 hover:text-[#FF6B6B] transition-colors"><Trash2 className="w-4 h-4" /></button>
-                            </div>
-                         </div>
-                      ))}
-                   </div>
-                </motion.div>
-              )}
-
-              {/* 3. PREFERENCES */}
-              {activeTab === "preferences" && (
-                <motion.div 
-                  key="preferences"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                  className="space-y-6"
-                >
-                   <h2 className={`text-2xl font-bold ${dmSans.className}`}>Preferences</h2>
-                   
-                   <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-8">
-                      {/* Location */}
-                      <div>
-                         <label className="block text-sm font-bold text-[#2B2D42] mb-2">Default Location</label>
-                         <div className="flex gap-2">
-                            <div className="flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-                               <MapPin className="w-5 h-5 text-slate-400 mr-3" />
-                               <input type="text" defaultValue="Mumbai, Maharashtra" className="bg-transparent w-full outline-none text-slate-700" />
-                            </div>
-                            <button className="px-6 py-3 bg-[#0D7377] text-white font-bold rounded-xl hover:bg-[#0a5e61]">Save</button>
-                         </div>
-                      </div>
-
-                      {/* Default Priority Weights */}
-                      <div>
-                         <label className="block text-sm font-bold text-[#2B2D42] mb-4">Default Comparison Priorities</label>
-                         <div className="space-y-6 p-4 bg-slate-50 rounded-xl">
-                            <RangeSlider label="Price Importance" defaultValue={80} />
-                            <RangeSlider label="Quality / Specs" defaultValue={50} />
-                            <RangeSlider label="Distance / Convenience" defaultValue={30} />
-                         </div>
-                      </div>
-
-                      {/* Notifications */}
-                      <div>
-                         <label className="block text-sm font-bold text-[#2B2D42] mb-4">Notifications</label>
-                         <div className="space-y-3">
-                            <ToggleRow label="Email me on price drops" />
-                            <ToggleRow label="Weekly comparison digest" />
-                            <ToggleRow label="New features & updates" />
-                         </div>
-                      </div>
-                   </div>
-                </motion.div>
-              )}
-
-           </AnimatePresence>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <AnimatePresence mode="popLayout">
+              {filteredDisplayItems.map((item) => (
+                <ItemCard 
+                  key={item.id} 
+                  item={item} 
+                  isSaved={savedIds.includes(item.id)} 
+                  onToggleSave={() => setSavedIds(prev => prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id])} 
+                />
+              ))}
+            </AnimatePresence>
+          </div>
         </main>
       </div>
+
+      {/* FILTER DRAWER (Client-Side) */}
+      <AnimatePresence>
+        {filterDrawerOpen && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setFilterDrawerOpen(false)} className="fixed inset-0 bg-black/10 backdrop-blur-sm z-40" />
+            <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} className="fixed right-0 top-0 w-80 h-full bg-white z-50 p-8 shadow-2xl flex flex-col">
+               <div className="flex justify-between items-center mb-10">
+                 <h2 className="font-bold text-xl">Local Filters</h2>
+                 <X className="cursor-pointer" onClick={() => setFilterDrawerOpen(false)} />
+               </div>
+               <div className="flex-1 space-y-8">
+                 <div className="bg-slate-50 p-4 rounded-xl text-[10px] text-slate-500 leading-relaxed border border-dashed border-slate-200">
+                    Client-side filters hide items in your current view. Hit "Search" again to refresh from server.
+                 </div>
+                 <div>
+                   <label className="text-xs font-bold text-slate-400 block mb-4 uppercase">Min Rating</label>
+                   <div className="grid grid-cols-4 gap-2">
+                     {[0, 3, 4, 4.5].map(r => (
+                       <button key={r} onClick={() => setMinRating(r)} className={`py-2 rounded-lg border text-[10px] font-bold transition-all ${minRating === r ? "bg-[#0D7377] text-white" : "bg-white text-slate-500"}`}>
+                         {r === 0 ? "All" : r + "+"}
+                       </button>
+                     ))}
+                   </div>
+                 </div>
+               </div>
+               <button onClick={() => setFilterDrawerOpen(false)} className="w-full py-4 bg-[#0D7377] text-white rounded-2xl font-bold shadow-lg shadow-[#0D7377]/20">
+                 Apply View
+               </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-// --- Components ---
+function ItemCard({ item, isSaved, onToggleSave }: any) {
+  const router = useRouter();
 
-function NavButton({ active, onClick, icon, label }: any) {
-   return (
-      <button 
-        onClick={onClick}
-        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${
-           active 
-           ? "bg-white text-[#0D7377] shadow-sm border border-slate-100" 
-           : "text-slate-500 hover:bg-white/50 hover:text-slate-700"
-        }`}
-      >
-         <div className={`${active ? "text-[#14FFEC] drop-shadow-sm" : "text-slate-400"}`}>{icon}</div>
-         {label}
-         {active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#14FFEC] shadow-[0_0_8px_#14FFEC]" />}
-      </button>
-   );
-}
-
-function EmptyState({ icon, title, desc }: any) {
-   return (
-      <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
-         <div className="mb-4">{icon}</div>
-         <h3 className="text-lg font-bold text-[#2B2D42]">{title}</h3>
-         <p className="text-slate-500 text-sm max-w-xs mt-1">{desc}</p>
+  return (
+    <motion.div layout initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-[2rem] p-5 border border-slate-100 shadow-sm hover:shadow-xl transition-all flex flex-col h-full group">
+      <div className="relative h-44 rounded-2xl overflow-hidden mb-4 bg-slate-50">
+        <img src={item.img} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+        <div className="absolute top-3 right-3 bg-white/90 px-2 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 shadow-sm">
+           <Star className="w-3 h-3 text-orange-400 fill-orange-400" /> {item.rating}
+        </div>
+        <div className="absolute bottom-3 left-3 bg-white/95 px-2 py-0.5 rounded text-[8px] font-black text-[#0D7377] uppercase tracking-tighter shadow-sm">
+          {item.type}
+        </div>
       </div>
-   );
-}
-
-function RangeSlider({ label, defaultValue }: any) {
-   return (
-      <div>
-         <div className="flex justify-between text-xs font-bold text-slate-500 mb-2">
-            <span>{label}</span>
-            <span>{defaultValue}%</span>
+      
+      <div className="space-y-3 flex-grow">
+         <h3 className="font-bold text-slate-800 line-clamp-1 text-sm">{item.title}</h3>
+         <div className="flex justify-between items-center text-[10px]">
+            <span className="text-[#0D7377] font-extrabold">{item.price}</span>
+            <span className="text-slate-400 flex items-center gap-1 font-medium"><MapPin className="w-3 h-3" /> {item.loc.split(',')[0]}</span>
          </div>
-         <input type="range" className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#0D7377]" defaultValue={defaultValue} />
+         <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 mt-2">
+            <p className="text-[10px] text-slate-500 italic leading-relaxed line-clamp-2">
+              {item.reason ? `"${item.reason.substring(0, 100)}..."` : "Analyzing data..."}
+            </p>
+         </div>
       </div>
-   );
-}
 
-function ToggleRow({ label }: any) {
-   const [isOn, setIsOn] = useState(true);
-   return (
-      <div className="flex items-center justify-between">
-         <span className="text-sm text-slate-600">{label}</span>
-         <button 
-           onClick={() => setIsOn(!isOn)}
-           className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${isOn ? 'bg-[#0D7377]' : 'bg-slate-300'}`}
-         >
-            <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${isOn ? 'translate-x-5' : 'translate-x-0'}`} />
-         </button>
+      <div className="mt-5 flex gap-2">
+        <button 
+          onClick={() => router.push(`/item/${item.id}`)}
+          className="flex-1 py-2.5 rounded-xl bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center gap-2 hover:bg-[#0D7377] transition-all"
+        >
+          View Details <ArrowRight className="w-3 h-3" />
+        </button>
+        <button onClick={onToggleSave} className={`w-11 h-11 flex items-center justify-center rounded-xl border transition-all ${isSaved ? "text-red-500 bg-red-50 border-red-100" : "text-slate-300 border-slate-100 hover:text-red-400"}`}>
+          <Heart className={`w-4 h-4 ${isSaved ? "fill-current" : ""}`} />
+        </button>
       </div>
-   );
+    </motion.div>
+  );
 }
