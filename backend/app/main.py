@@ -7,4 +7,4 @@ app.include_router(search_router, prefix="/api")
 
 @app.get("/")
 def root():
-    return {"message": "RANGER API running"}
+    return {"message": "RANGER API running....."}
