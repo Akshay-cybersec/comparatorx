@@ -1,11 +1,24 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  LayoutDashboard, Scale, Bell, Settings, Clock, 
-  Trash2, Share2, Edit2, ArrowRight, TrendingDown, 
-  MapPin, LogOut, Search, CheckCircle, AlertTriangle
+  LayoutDashboard, 
+  Smartphone, 
+  Stethoscope, 
+  Utensils, 
+  Search, 
+  Bell, 
+  Settings, 
+  ChevronLeft, 
+  ChevronRight, 
+  SlidersHorizontal, 
+  MapPin, 
+  Star, 
+  X,
+  Plus,
+  Heart,
+  History
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
 
@@ -14,295 +27,382 @@ const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '700'] });
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600'] });
 
 // --- Mock Data ---
-const SAVED_COMPARISONS = [
-  {
-    id: 1,
-    title: "Flagship Phones 2024",
-    items: ["iPhone 15 Pro", "S24 Ultra", "Pixel 8 Pro"],
-    date: "2 days ago",
-    images: ["https://images.unsplash.com/photo-1696446701796-da61225697cc?w=100", "https://images.unsplash.com/photo-1610945265078-38584e26903b?w=100"]
-  },
-  {
-    id: 2,
-    title: "Dentists in Bandra",
-    items: ["SmileCare", "City Dental", "Dr. Ayesha"],
-    date: "1 week ago",
-    images: [] // Empty state test
-  }
+const NAV_ITEMS = [
+  { id: "overview", label: "Overview", icon: <LayoutDashboard className="w-5 h-5" /> },
+  { id: "saved", label: "Saved Items", icon: <Heart className="w-5 h-5" /> },
+  { id: "history", label: "History", icon: <History className="w-5 h-5" /> },
 ];
 
-const PRICE_ALERTS = [
-  {
-    id: 1,
-    item: "Sony WH-1000XM5",
-    target: 24000,
-    current: 26990,
-    status: "active", // active, triggered, paused
-    image: "https://images.unsplash.com/photo-1618366712010-f4ae9c647dcb?w=100"
-  },
-  {
-    id: 2,
-    item: "MacBook Air M2",
-    target: 95000,
-    current: 92000,
-    status: "triggered",
-    image: "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=100"
-  }
+const SEARCH_FILTERS = [
+  { id: "all", label: "All", icon: null },
+  { id: "gadget", label: "Gadgets", icon: <Smartphone className="w-4 h-4" /> },
+  { id: "doctor", label: "Doctors", icon: <Stethoscope className="w-4 h-4" /> },
+  { id: "food", label: "Food", icon: <Utensils className="w-4 h-4" /> },
 ];
 
-const RECENT_SEARCHES = ["Best Gaming Laptop under 80k", "Plumbers near me", "Nike Jordan High"];
+const MOCK_ITEMS = [
+  { id: 1, type: "gadget", title: "iPhone 15 Pro", price: "₹1,34,900", rating: 4.8, loc: "Amazon", img: "https://images.unsplash.com/photo-1696446701796-da61225697cc?w=400&auto=format&fit=crop&q=60" },
+  { id: 2, type: "gadget", title: "Samsung S24 Ultra", price: "₹1,29,999", rating: 4.7, loc: "Flipkart", img: "https://images.unsplash.com/photo-1610945265078-38584e26903b?w=400&auto=format&fit=crop&q=60" },
+  { id: 3, type: "doctor", title: "Dr. Anjali Mehta", price: "₹1,500/visit", rating: 4.9, loc: "Bandra West", img: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=400&auto=format&fit=crop&q=60" },
+  { id: 4, type: "food", title: "Pizza By The Bay", price: "₹800 for two", rating: 4.5, loc: "Marine Drive", img: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&auto=format&fit=crop&q=60" },
+  { id: 5, type: "gadget", title: "MacBook Air M2", price: "₹99,900", rating: 4.9, loc: "Croma", img: "https://images.unsplash.com/photo-1611186871348-b1ce696e52c9?w=400&auto=format&fit=crop&q=60" },
+  { id: 6, type: "doctor", title: "Smile Care Dental", price: "₹500/consult", rating: 4.6, loc: "Andheri East", img: "https://images.unsplash.com/photo-1606811841689-23dfddce3e95?w=400&auto=format&fit=crop&q=60" },
+  { id: 7, type: "food", title: "Blue Tokai Coffee", price: "₹600 for two", rating: 4.8, loc: "Fort", img: "https://images.unsplash.com/photo-1497935586351-b67a49e012bf?w=400&auto=format&fit=crop&q=60" },
+  { id: 8, type: "gadget", title: "Sony WH-1000XM5", price: "₹26,990", rating: 4.8, loc: "Amazon", img: "https://images.unsplash.com/photo-1618366712010-f4ae9c647dcb?w=400&auto=format&fit=crop&q=60" },
+];
 
 export default function DashboardPage() {
-  const [activeTab, setActiveTab] = useState("comparisons");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [activeNav, setActiveNav] = useState("overview");
+  
+  // Search & Filter State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedType, setSelectedType] = useState("all");
+  
+  // Saved Items State
+  const [savedIds, setSavedIds] = useState<number[]>([]);
+
+  // Function to toggle saved state
+  const toggleSave = (id: number) => {
+    setSavedIds(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  // Filter Logic (Search + Category)
+  const filteredItems = useMemo(() => {
+    return MOCK_ITEMS.filter((item) => {
+      // 1. Check if the item matches the selected "Pill" category
+      const matchesType = selectedType === "all" || item.type === selectedType;
+      
+      // 2. Check if the search text matches Title, Location, or Item Type
+      const query = searchQuery.toLowerCase();
+      const matchesSearch = 
+        item.title.toLowerCase().includes(query) || 
+        item.loc.toLowerCase().includes(query) ||
+        item.type.toLowerCase().includes(query);
+
+      return matchesType && matchesSearch;
+    });
+  }, [selectedType, searchQuery]);
+
+  // View Logic (Overview vs Saved Items)
+  const displayedItems = useMemo(() => {
+    if (activeNav === 'saved') {
+      return filteredItems.filter(item => savedIds.includes(item.id));
+    }
+    return filteredItems;
+  }, [activeNav, filteredItems, savedIds]);
 
   return (
-    <div className={`min-h-screen bg-[#F8F9FA] text-[#2B2D42] ${inter.className}`}>
+    <div className={`h-screen w-full bg-[#F3F4F6] text-[#2B2D42] ${inter.className} flex overflow-hidden`}>
       
-      {/* --- Header --- */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-           <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#0D7377] text-white flex items-center justify-center font-bold text-lg">
-                JD
-              </div>
-              <div>
-                 <h1 className={`text-lg font-bold leading-none ${dmSans.className}`}>Welcome back, John!</h1>
-                 <p className="text-xs text-slate-500">Member since Jan 2026</p>
-              </div>
-           </div>
-           <button className="text-sm font-medium text-slate-500 hover:text-[#FF6B6B] flex items-center gap-2 transition-colors">
-              <LogOut className="w-4 h-4" /> Sign Out
-           </button>
-        </div>
-      </header>
+      {/* --- 1. SIDEBAR --- */}
+      <motion.aside
+        initial={false}
+        animate={{ width: sidebarOpen ? 260 : 80 }}
+        className="h-full bg-white border-r border-slate-200 z-20 flex flex-col relative shadow-xl shadow-slate-200/50"
+      >
+        <button 
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="absolute -right-3 top-8 bg-white border border-slate-200 rounded-full p-1 shadow-sm hover:text-[#0D7377] transition-colors z-30"
+        >
+          {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </button>
 
-      <div className="max-w-6xl mx-auto px-4 py-8 grid grid-cols-1 md:grid-cols-4 gap-8">
+        <div className={`h-20 flex items-center ${sidebarOpen ? "px-6" : "justify-center"} border-b border-slate-100`}>
+          <div className="w-8 h-8 bg-[#0D7377] rounded-lg flex items-center justify-center text-white font-bold text-lg shrink-0">
+            C
+          </div>
+          {sidebarOpen && (
+            <motion.span 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              className={`ml-3 text-xl font-bold tracking-tight text-[#0D7377] ${dmSans.className}`}
+            >
+              ComparatorX
+            </motion.span>
+          )}
+        </div>
+
+        <nav className="flex-1 py-6 space-y-2 px-3 overflow-y-auto">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveNav(item.id)}
+              className={`w-full flex items-center p-3 rounded-xl transition-all relative group ${
+                activeNav === item.id 
+                  ? "bg-[#0D7377]/10 text-[#0D7377]" 
+                  : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+              } ${!sidebarOpen && "justify-center"}`}
+            >
+              <div className="shrink-0">{item.icon}</div>
+              {sidebarOpen && (
+                <motion.span 
+                  initial={{ opacity: 0 }} 
+                  animate={{ opacity: 1 }} 
+                  className="ml-3 font-medium whitespace-nowrap"
+                >
+                  {item.label}
+                </motion.span>
+              )}
+              {activeNav === item.id && (
+                <motion.div layoutId="activeNav" className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-[#0D7377]" />
+              )}
+            </button>
+          ))}
+        </nav>
+
+        <div className="p-4 border-t border-slate-100 space-y-2">
+           <button className={`w-full flex items-center p-3 rounded-xl text-slate-500 hover:bg-slate-50 ${!sidebarOpen && "justify-center"}`}>
+             <Settings className="w-5 h-5" />
+             {sidebarOpen && <span className="ml-3 font-medium">Settings</span>}
+           </button>
+           <div className={`flex items-center gap-3 mt-4 ${!sidebarOpen && "justify-center"}`}>
+             <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FF6B6B] to-[#FF8E8E] flex items-center justify-center text-white text-xs font-bold shrink-0">
+               JD
+             </div>
+             {sidebarOpen && (
+               <div className="flex-1 overflow-hidden">
+                 <p className="text-sm font-bold truncate">John Doe</p>
+                 <p className="text-xs text-slate-400 truncate">Pro Member</p>
+               </div>
+             )}
+           </div>
+        </div>
+      </motion.aside>
+
+      {/* --- 2. MAIN CONTENT AREA --- */}
+      <div className="flex-1 flex flex-col h-full relative min-w-0">
         
-        {/* --- Sidebar Navigation --- */}
-        <aside className="md:col-span-1">
-           <nav className="space-y-1 sticky top-28">
-              <NavButton active={activeTab === "comparisons"} onClick={() => setActiveTab("comparisons")} icon={<Scale className="w-4 h-4" />} label="Saved Comparisons" />
-              <NavButton active={activeTab === "alerts"} onClick={() => setActiveTab("alerts")} icon={<Bell className="w-4 h-4" />} label="Price Alerts" />
-              <NavButton active={activeTab === "preferences"} onClick={() => setActiveTab("preferences")} icon={<Settings className="w-4 h-4" />} label="Preferences" />
-              
-              <div className="pt-6 mt-6 border-t border-slate-200">
-                 <p className="px-4 text-xs font-bold text-slate-400 uppercase mb-2">Recent Searches</p>
-                 <div className="space-y-1">
-                    {RECENT_SEARCHES.map((s, i) => (
-                       <button key={i} className="w-full text-left px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg flex items-center gap-2 truncate">
-                          <Clock className="w-3 h-3 text-slate-400" /> {s}
+        {/* Header & Search */}
+        <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 z-10 sticky top-0">
+           <div className="px-8 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex-1 w-full max-w-3xl flex flex-col gap-3">
+                 <div className="relative w-full">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                    <input 
+                      type="text" 
+                      placeholder="Search for iPhone, Dentists, Pizza..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3 bg-slate-100 border-transparent focus:bg-white focus:border-[#0D7377] border-2 rounded-2xl outline-none transition-all placeholder:text-slate-400 font-medium shadow-sm"
+                    />
+                 </div>
+
+                 <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                    {SEARCH_FILTERS.map(filter => (
+                       <button
+                         key={filter.id}
+                         onClick={() => {
+                           setSelectedType(filter.id);
+                           setSearchQuery(""); 
+                         }}
+                         className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all border ${
+                            selectedType === filter.id 
+                            ? "bg-[#0D7377] text-white border-[#0D7377] shadow-md shadow-[#0D7377]/20" 
+                            : "bg-white text-slate-600 border-slate-200 hover:border-[#0D7377]/50"
+                         }`}
+                       >
+                          {filter.icon}
+                          {filter.label}
                        </button>
                     ))}
                  </div>
               </div>
-           </nav>
-        </aside>
 
-        {/* --- Main Content Area --- */}
-        <main className="md:col-span-3">
-           <AnimatePresence mode="wait">
-              
-              {/* 1. SAVED COMPARISONS */}
-              {activeTab === "comparisons" && (
-                <motion.div 
-                  key="comparisons"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                  className="space-y-6"
+              <div className="flex items-center gap-4 shrink-0">
+                <button className="relative p-2 text-slate-400 hover:text-[#0D7377] transition-colors">
+                  <Bell className="w-6 h-6" />
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-[#FF6B6B] rounded-full border border-white" />
+                </button>
+                <button 
+                  onClick={() => setFilterDrawerOpen(!filterDrawerOpen)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl border font-medium transition-colors ${
+                    filterDrawerOpen ? "bg-[#0D7377] text-white border-[#0D7377]" : "bg-white border-slate-200 text-slate-600 hover:border-[#0D7377]"
+                  }`}
                 >
-                   <div className="flex justify-between items-end">
-                      <h2 className={`text-2xl font-bold ${dmSans.className}`}>Saved Comparisons</h2>
-                      <span className="text-sm text-slate-500">{SAVED_COMPARISONS.length} Collections</span>
-                   </div>
+                  <SlidersHorizontal className="w-4 h-4" /> Advanced
+                </button>
+              </div>
+           </div>
+        </header>
 
-                   {SAVED_COMPARISONS.length > 0 ? (
-                     <div className="grid sm:grid-cols-2 gap-4">
-                        {SAVED_COMPARISONS.map(comp => (
-                           <div key={comp.id} className="bg-white p-4 rounded-2xl border border-slate-200 hover:border-[#0D7377]/50 hover:shadow-lg transition-all group cursor-pointer">
-                              <div className="flex items-center justify-between mb-3">
-                                 <h3 className="font-bold text-lg group-hover:text-[#0D7377] transition-colors">{comp.title}</h3>
-                                 <div className="flex gap-1">
-                                    <button className="p-1.5 text-slate-400 hover:text-[#0D7377] hover:bg-[#0D7377]/10 rounded"><Edit2 className="w-4 h-4" /></button>
-                                    <button className="p-1.5 text-slate-400 hover:text-[#FF6B6B] hover:bg-[#FF6B6B]/10 rounded"><Trash2 className="w-4 h-4" /></button>
-                                 </div>
-                              </div>
-                              
-                              {/* Thumbnail Grid */}
-                              <div className="flex gap-2 mb-4 h-16">
-                                 {comp.images.length > 0 ? comp.images.slice(0, 3).map((img, i) => (
-                                    <img key={i} src={img} alt="item" className="w-16 h-16 rounded-lg object-cover bg-slate-100" />
-                                 )) : (
-                                    <div className="w-full h-16 bg-slate-50 rounded-lg flex items-center justify-center text-xs text-slate-400">No images</div>
-                                 )}
-                                 <div className="flex-1 bg-slate-50 rounded-lg flex items-center justify-center text-xs font-bold text-slate-500">
-                                    +{comp.items.length} Items
-                                 </div>
-                              </div>
-                              
-                              <div className="flex justify-between items-center text-xs text-slate-400">
-                                 <span>Saved {comp.date}</span>
-                                 <button className="text-[#0D7377] font-bold flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                                    View <ArrowRight className="w-3 h-3" />
-                                 </button>
-                              </div>
-                           </div>
-                        ))}
-                     </div>
+        {/* Content Grid */}
+        <main className="flex-1 overflow-y-auto p-8 scrollbar-hide">
+           <div className="flex justify-between items-end mb-6">
+              <div>
+                <h1 className={`${dmSans.className} text-3xl font-bold text-[#2B2D42]`}>
+                  {activeNav === 'saved' ? 'My Saved Items' : (
+                    selectedType === 'all' 
+                      ? (searchQuery ? `Results for "${searchQuery}"` : 'Discover Everything') 
+                      : `${SEARCH_FILTERS.find(f => f.id === selectedType)?.label}`
+                  )}
+                </h1>
+                <p className="text-slate-500 mt-1">Showing {displayedItems.length} results.</p>
+              </div>
+           </div>
+
+           <motion.div 
+             layout 
+             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+           >
+             <AnimatePresence mode="popLayout">
+               {displayedItems.length > 0 ? (
+                 displayedItems.map((item) => (
+                   <ItemCard 
+                     key={item.id} 
+                     item={item} 
+                     isSaved={savedIds.includes(item.id)}
+                     onToggleSave={() => toggleSave(item.id)}
+                   />
+                 ))
+               ) : (
+                 <motion.div 
+                   initial={{ opacity: 0 }} 
+                   animate={{ opacity: 1 }}
+                   className="col-span-full py-20 text-center text-slate-400"
+                 >
+                   {activeNav === 'saved' ? (
+                     <>
+                        <Heart className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                        <p className="text-lg font-medium">No saved items yet.</p>
+                        <p className="text-sm">Browse items and click the heart icon to save them.</p>
+                     </>
                    ) : (
-                     <EmptyState 
-                       icon={<Scale className="w-12 h-12 text-slate-300" />} 
-                       title="No saved comparisons" 
-                       desc="Start searching to compare products side-by-side."
-                     />
+                     <>
+                        <Search className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                        <p className="text-lg font-medium">No items found matching your search.</p>
+                        <button onClick={() => {setSearchQuery(""); setSelectedType("all")}} className="mt-2 text-[#0D7377] underline">Clear Filters</button>
+                     </>
                    )}
-                </motion.div>
-              )}
-
-              {/* 2. PRICE ALERTS */}
-              {activeTab === "alerts" && (
-                <motion.div 
-                  key="alerts"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                  className="space-y-6"
-                >
-                   <h2 className={`text-2xl font-bold ${dmSans.className}`}>Price Alerts</h2>
-                   
-                   <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                      {PRICE_ALERTS.map((alert, i) => (
-                         <div key={alert.id} className={`p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors ${i !== 0 ? 'border-t border-slate-100' : ''}`}>
-                            <img src={alert.image} alt="product" className="w-12 h-12 rounded-lg object-cover bg-slate-100" />
-                            
-                            <div className="flex-1 min-w-0">
-                               <h4 className="font-bold text-[#2B2D42] truncate">{alert.item}</h4>
-                               <div className="flex items-center gap-3 text-sm">
-                                  <span className="text-slate-500">Target: ₹{alert.target.toLocaleString()}</span>
-                                  {alert.current <= alert.target ? (
-                                     <span className="text-[#10B981] font-bold flex items-center gap-1">
-                                        <TrendingDown className="w-3 h-3" /> Now ₹{alert.current.toLocaleString()}
-                                     </span>
-                                  ) : (
-                                     <span className="text-slate-400">Current: ₹{alert.current.toLocaleString()}</span>
-                                  )}
-                               </div>
-                            </div>
-
-                            <div className="flex items-center gap-4">
-                               {alert.status === 'triggered' && (
-                                  <span className="px-3 py-1 bg-[#14FFEC]/20 text-[#0D7377] text-xs font-bold rounded-full border border-[#14FFEC]/50 animate-pulse">
-                                     Price Drop!
-                                  </span>
-                               )}
-                               <button className="text-slate-400 hover:text-[#FF6B6B] transition-colors"><Trash2 className="w-4 h-4" /></button>
-                            </div>
-                         </div>
-                      ))}
-                   </div>
-                </motion.div>
-              )}
-
-              {/* 3. PREFERENCES */}
-              {activeTab === "preferences" && (
-                <motion.div 
-                  key="preferences"
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-                  className="space-y-6"
-                >
-                   <h2 className={`text-2xl font-bold ${dmSans.className}`}>Preferences</h2>
-                   
-                   <div className="bg-white p-6 rounded-2xl border border-slate-200 space-y-8">
-                      {/* Location */}
-                      <div>
-                         <label className="block text-sm font-bold text-[#2B2D42] mb-2">Default Location</label>
-                         <div className="flex gap-2">
-                            <div className="flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-                               <MapPin className="w-5 h-5 text-slate-400 mr-3" />
-                               <input type="text" defaultValue="Mumbai, Maharashtra" className="bg-transparent w-full outline-none text-slate-700" />
-                            </div>
-                            <button className="px-6 py-3 bg-[#0D7377] text-white font-bold rounded-xl hover:bg-[#0a5e61]">Save</button>
-                         </div>
-                      </div>
-
-                      {/* Default Priority Weights */}
-                      <div>
-                         <label className="block text-sm font-bold text-[#2B2D42] mb-4">Default Comparison Priorities</label>
-                         <div className="space-y-6 p-4 bg-slate-50 rounded-xl">
-                            <RangeSlider label="Price Importance" defaultValue={80} />
-                            <RangeSlider label="Quality / Specs" defaultValue={50} />
-                            <RangeSlider label="Distance / Convenience" defaultValue={30} />
-                         </div>
-                      </div>
-
-                      {/* Notifications */}
-                      <div>
-                         <label className="block text-sm font-bold text-[#2B2D42] mb-4">Notifications</label>
-                         <div className="space-y-3">
-                            <ToggleRow label="Email me on price drops" />
-                            <ToggleRow label="Weekly comparison digest" />
-                            <ToggleRow label="New features & updates" />
-                         </div>
-                      </div>
-                   </div>
-                </motion.div>
-              )}
-
-           </AnimatePresence>
+                 </motion.div>
+               )}
+             </AnimatePresence>
+           </motion.div>
         </main>
       </div>
+
+      {/* --- 3. ADVANCED FILTER DRAWER --- */}
+      <AnimatePresence>
+        {filterDrawerOpen && (
+          <motion.div
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            className="w-80 h-full bg-white border-l border-slate-200 shadow-2xl absolute right-0 top-0 z-30 flex flex-col"
+          >
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+              <h3 className={`${dmSans.className} text-xl font-bold`}>Advanced Filters</h3>
+              <button onClick={() => setFilterDrawerOpen(false)} className="p-2 hover:bg-slate-100 rounded-lg">
+                <X className="w-5 h-5 text-slate-500" />
+              </button>
+            </div>
+            {/* ... Filters content ... */}
+            <div className="p-6 space-y-8 overflow-y-auto flex-1">
+               <div>
+                  <label className="text-sm font-bold text-slate-700 mb-3 block">Price Range</label>
+                  <input type="range" className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#0D7377]" />
+                  <div className="flex justify-between text-xs text-slate-500 mt-2">
+                    <span>Low</span>
+                    <span>High</span>
+                  </div>
+               </div>
+               <div>
+                  <label className="text-sm font-bold text-slate-700 mb-3 block">Availability</label>
+                  <div className="space-y-2">
+                     <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-[#0D7377] focus:ring-[#0D7377]" defaultChecked />
+                        <span className="text-sm text-slate-600">In Stock / Available Now</span>
+                     </label>
+                     <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-[#0D7377] focus:ring-[#0D7377]" />
+                        <span className="text-sm text-slate-600">Pre-order / Booking</span>
+                     </label>
+                  </div>
+               </div>
+               <div>
+                  <label className="text-sm font-bold text-slate-700 mb-3 block">Distance Radius</label>
+                  <div className="flex gap-2 flex-wrap">
+                     {['5km', '10km', '25km', '50km+'].map(dist => (
+                       <button key={dist} className="px-3 py-1 text-xs font-medium border border-slate-200 rounded-full hover:bg-[#0D7377] hover:text-white transition-colors">
+                         {dist}
+                       </button>
+                     ))}
+                  </div>
+               </div>
+            </div>
+            <div className="p-6 border-t border-slate-100">
+               <button className="w-full py-3 bg-[#0D7377] text-white rounded-xl font-bold hover:bg-[#095558] transition-colors">
+                 Apply Filters
+               </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
 
-// --- Components ---
-
-function NavButton({ active, onClick, icon, label }: any) {
-   return (
-      <button 
-        onClick={onClick}
-        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all font-medium text-sm ${
-           active 
-           ? "bg-white text-[#0D7377] shadow-sm border border-slate-100" 
-           : "text-slate-500 hover:bg-white/50 hover:text-slate-700"
-        }`}
-      >
-         <div className={`${active ? "text-[#14FFEC] drop-shadow-sm" : "text-slate-400"}`}>{icon}</div>
-         {label}
-         {active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-[#14FFEC] shadow-[0_0_8px_#14FFEC]" />}
-      </button>
-   );
+// --- Sub-Component: Item Card ---
+interface ItemCardProps {
+  item: any;
+  isSaved: boolean;
+  onToggleSave: () => void;
 }
 
-function EmptyState({ icon, title, desc }: any) {
-   return (
-      <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50/50">
-         <div className="mb-4">{icon}</div>
-         <h3 className="text-lg font-bold text-[#2B2D42]">{title}</h3>
-         <p className="text-slate-500 text-sm max-w-xs mt-1">{desc}</p>
+function ItemCard({ item, isSaved, onToggleSave }: ItemCardProps) {
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      whileHover={{ y: -5 }}
+      className="bg-white rounded-3xl p-4 border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-[#0D7377]/10 transition-all cursor-pointer group flex flex-col h-full"
+    >
+      <div className="relative h-48 rounded-2xl overflow-hidden mb-4">
+        <img src={item.img} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm">
+           <Star className="w-3 h-3 text-orange-400 fill-orange-400" /> {item.rating}
+        </div>
+        <div className="absolute top-3 left-3 bg-black/50 backdrop-blur-md px-2 py-1 rounded-lg text-xs font-medium text-white capitalize">
+           {item.type}
+        </div>
       </div>
-   );
-}
 
-function RangeSlider({ label, defaultValue }: any) {
-   return (
-      <div>
-         <div className="flex justify-between text-xs font-bold text-slate-500 mb-2">
-            <span>{label}</span>
-            <span>{defaultValue}%</span>
+      <div className="space-y-2 flex-grow">
+         <h3 className={`${dmSans.className} font-bold text-lg text-[#2B2D42] truncate`}>{item.title}</h3>
+         
+         <div className="flex justify-between items-center">
+            <span className="text-[#FF6B6B] font-bold">{item.price}</span>
+            <div className="flex items-center gap-1 text-xs text-slate-400">
+               <MapPin className="w-3 h-3" /> {item.loc}
+            </div>
          </div>
-         <input type="range" className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#0D7377]" defaultValue={defaultValue} />
       </div>
-   );
-}
 
-function ToggleRow({ label }: any) {
-   const [isOn, setIsOn] = useState(true);
-   return (
-      <div className="flex items-center justify-between">
-         <span className="text-sm text-slate-600">{label}</span>
-         <button 
-           onClick={() => setIsOn(!isOn)}
-           className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors ${isOn ? 'bg-[#0D7377]' : 'bg-slate-300'}`}
-         >
-            <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${isOn ? 'translate-x-5' : 'translate-x-0'}`} />
-         </button>
+      <div className="mt-4 flex gap-2">
+        <button className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 group-hover:bg-[#0D7377] group-hover:text-white group-hover:border-[#0D7377] transition-all flex items-center justify-center gap-2">
+           Add to Compare <Plus className="w-4 h-4" />
+        </button>
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSave();
+          }}
+          className={`w-12 h-10.5 flex items-center justify-center rounded-xl border transition-colors ${
+            isSaved 
+            ? "bg-red-50 border-red-200 text-[#FF6B6B]" 
+            : "border-slate-200 text-slate-400 hover:text-[#FF6B6B] hover:border-[#FF6B6B]"
+          }`}
+        >
+          <Heart className={`w-5 h-5 ${isSaved ? "fill-[#FF6B6B]" : ""}`} />
+        </button>
       </div>
-   );
+    </motion.div>
+  );
 }
