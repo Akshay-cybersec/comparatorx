@@ -2,3 +2,8 @@ fastapi
 uvicorn
 pydantic
 requests
+spacy
+beautifulsoup4
+requests
+lxml
+python-dotenv
