@@ -1,21 +1,31 @@
 from fastapi import APIRouter, Query
-from app.services.fetcher import fetch_from_sources
+from app.services.scraper import scrape_amazon, scrape_flipkart
 from app.services.normalizer import normalize_data
 from app.services.ranker import rank_products
+from app.services.nlp import parse_query
 
 router = APIRouter()
 
 @router.get("/search")
-def search(
-    q: str = Query(...),
-    category: str = Query(...)
-):
-    raw_data = fetch_from_sources(q, category)
-    normalized = normalize_data(raw_data)
-    ranked = rank_products(normalized)
+def search(q: str = Query(...), category: str = Query(...)):
+    ai = parse_query(q)
+
+    data = []
+    try:
+        data += scrape_amazon(q)
+    except:
+        pass
+
+    try:
+        data += scrape_flipkart(q)
+    except:
+        pass
+
+    normalized = normalize_data(data)
+    ranked = rank_products(normalized, ai["priority"])
 
     return {
         "query": q,
-        "category": category,
+        "ai_understanding": ai,
         "results": ranked
     }
