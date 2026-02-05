@@ -6,7 +6,7 @@ from app.routes.aibot import router as aibot_router
 
 
 
-app = FastAPI(title="RANGER Backend")
+app = FastAPI(title="ComparatorX Backend")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allows all origins

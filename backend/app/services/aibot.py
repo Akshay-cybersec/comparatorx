@@ -465,7 +465,7 @@ def filter_and_rank_results(items: list, entities: Dict[str, Any]) -> list:
             "title": item.get("title"),
             "link": link,
             "snippet": item.get("snippet"),
-            "image": None,
+            "image": item.get("image"),
             "_domain": domain,
         })
 

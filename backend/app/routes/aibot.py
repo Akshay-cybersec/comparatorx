@@ -22,7 +22,35 @@ class AIBotRequest(BaseModel):
 
 @router.post("/aibot")
 def aibot(payload: AIBotRequest):
-    extraction = extract_intent_entities(payload.message)
+    message = (payload.message or "").strip()
+    lowered = message.lower()
+    if lowered in {"hi", "hello", "hey", "how are you", "how are you?"}:
+        return {
+            "ai_used": False,
+            "ai_model": None,
+            "ai_enhanced": False,
+            "intent": "general_query",
+            "confidence": 1.0,
+            "entities": {},
+            "query_used": None,
+            "reasoning": "Hi there! How can I help you today?",
+            "results": [],
+            "message": "Hi there! Tell me what product you are looking for, and I will help you find the best options.",
+        }
+    if lowered in {"who are you", "who are you?", "what are you", "what are you?"}:
+        return {
+            "ai_used": False,
+            "ai_model": None,
+            "ai_enhanced": False,
+            "intent": "general_query",
+            "confidence": 1.0,
+            "entities": {},
+            "query_used": None,
+            "reasoning": "Identity question detected.",
+            "results": [],
+            "message": "I’m the ComparatorX AI bot. I help you find and compare products based on what you ask.",
+        }
+    extraction = extract_intent_entities(message)
     intent, confidence, entities = normalize_extraction(extraction)
 
     if confidence < 0.6 and not entities.get("product"):
