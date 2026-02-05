@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Search, MapPin, Filter, Grid, List, Star, Heart, 
@@ -8,6 +8,7 @@ import {
   ShieldCheck, Zap, SlidersHorizontal, Map as MapIcon
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
+import { apiGet, buildQuery } from "@/lib/api";
 
 // --- Fonts ---
 const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '700'] });
@@ -35,11 +36,69 @@ export default function SearchResultsPage() {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [query, setQuery] = useState("Dentist");
+  const [results, setResults] = useState<any[]>(MOCK_RESULTS);
+  const [mode, setMode] = useState<string | null>(null);
 
-  // Simulate loading
-  useEffect(() => {
-    setTimeout(() => setIsLoading(false), 1500);
-  }, []);
+  const getCoords = () =>
+    new Promise<{ lat: number; lng: number } | null>((resolve) => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    });
+
+  const mapResult = (item: any, modeType: string) => {
+    const isProduct = modeType === "product";
+    const title = item.name || item.title || query;
+    return {
+      id: item.place_id || item.id || item.url || title,
+      title,
+      category: isProduct ? "Product" : "Service",
+      rating: item.rating ?? 0,
+      reviews: item.reviews ?? item.user_ratings_total ?? 0,
+      price: item.price ?? item.current_price ?? 0,
+      originalPrice: null,
+      distance: item.distance ?? 0,
+      available: item.open_now ?? true,
+      image: item.thumbnail || item.image || item.img || (isProduct
+        ? "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&q=80&w=600"
+        : "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=600"),
+      badges: ["Verified"],
+      source: item.source || (isProduct ? "Google Shopping" : "Google"),
+      features: []
+    };
+  };
+
+  const fetchResults = async () => {
+    const q = query.trim();
+    if (!q) return;
+    setIsLoading(true);
+    try {
+      const coords = await getCoords();
+      const queryString = buildQuery({
+        q,
+        lat: coords?.lat,
+        lng: coords?.lng
+      });
+      const data = await apiGet<any>(`/api/query?${queryString}`);
+      setMode(data.mode || null);
+      if (data.mode === "product") {
+        const mapped = (data.results || []).map((item: any) => mapResult(item, "product"));
+        setResults(mapped);
+      } else {
+        const mapped = (data.results || []).map((item: any) => mapResult(item, "service"));
+        setResults(mapped);
+      }
+    } catch (err) {
+      console.error(err);
+      setResults(MOCK_RESULTS);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const toggleSelection = (id: string) => {
     if (selectedItems.includes(id)) {
@@ -66,9 +125,21 @@ export default function SearchResultsPage() {
                 <Search className="w-5 h-5 text-slate-400" />
                 <input 
                   type="text" 
-                  defaultValue="Dentist"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      fetchResults();
+                    }
+                  }}
                   className="bg-transparent border-none outline-none w-full ml-3 text-slate-900 font-medium placeholder:text-slate-400"
                 />
+                {isLoading && (
+                  <div className="ml-3">
+                    <div className="w-5 h-5 rounded-full border-2 border-[#0D7377] border-t-transparent animate-spin" />
+                  </div>
+                )}
               </div>
 
               {/* Location Box */}
@@ -140,9 +211,9 @@ export default function SearchResultsPage() {
            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
               <div>
                 <h1 className={`text-2xl font-bold text-slate-900 ${dmSans.className}`}>
-                  Found 47 results for "Dentist"
+                  Found {results.length} results for "{query}"
                 </h1>
-                <p className="text-slate-500 text-sm mt-1">Showing 1-12 of 47</p>
+                <p className="text-slate-500 text-sm mt-1">Showing 1-{results.length} of {results.length}</p>
               </div>
 
               <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -178,7 +249,7 @@ export default function SearchResultsPage() {
              </div>
            ) : (
              <div className={`grid gap-4 ${viewMode === 'grid' ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3' : 'grid-cols-1'}`}>
-               {MOCK_RESULTS.map((item) => (
+               {results.map((item) => (
                  <ResultCard 
                    key={item.id} 
                    data={item} 

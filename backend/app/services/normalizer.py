@@ -1,4 +1,4 @@
-from app.services.google_places import get_place_details
+from app.services.google_places import get_place_details, build_photo_url
 import datetime
 
 SPECIALITY_KEYWORDS = {
@@ -78,19 +78,26 @@ def normalize_places(raw_data):
         opening_hours = details.get("opening_hours", {})
         types = details.get("types", [])
         name = d.get("name", "")
+        photos = d.get("photos", [])
+        if not photos:
+            photos = details.get("photos", [])
+        photo_ref = photos[0].get("photo_reference") if photos else None
+
+        address = d.get("vicinity") or d.get("formatted_address")
 
         normalized.append({
             "place_id": place_id,
             "name": name,
             "rating": d.get("rating", 0),
             "user_ratings_total": d.get("user_ratings_total", 0),
-            "address": d.get("vicinity"),
+            "address": address,
             "location": d["geometry"]["location"],
             "open_now": opening_hours.get("open_now", False),
             "today_timing": get_today_timing(opening_hours),
             "category": detect_category(types, name),
             "types": types,
-            "google_maps_url": f"https://maps.google.com/?q=place_id:{place_id}" if place_id else None
+            "google_maps_url": f"https://maps.google.com/?q=place_id:{place_id}" if place_id else None,
+            "image": build_photo_url(photo_ref) if photo_ref else None
         })
 
     return normalized

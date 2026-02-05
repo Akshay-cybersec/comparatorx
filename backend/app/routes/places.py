@@ -4,13 +4,14 @@ from typing import Optional, Dict, Any, List
 import datetime
 import re
 import os
-from app.services.google_places import search_places, get_place_details_full, geocode_location
+from app.services.google_places import search_places, get_place_details_full, geocode_location, search_places_text
 from app.services.normalizer import normalize_places
 from app.services.ranker import rank_doctors
 from app.services.web_search import search_web
 from app.services.youtube_search import search_youtube
 from app.services.youtube_transcripts import fetch_transcripts_for_videos
 from app.services.mongo import get_reviews
+from app.services.serpapi_shopping import search_shopping_products
 
 
 router = APIRouter()
@@ -81,16 +82,18 @@ def classify_query(query: str):
 
 def extract_location_hint(query: str) -> Optional[str]:
     q = query.lower()
-    patterns = [
-        r"\bnear\s+([a-zA-Z\s]+)$",
-        r"\bin\s+([a-zA-Z\s]+)$",
-        r"\baround\s+([a-zA-Z\s]+)$"
-    ]
-    for pat in patterns:
-        match = re.search(pat, q)
-        if match:
-            return match.group(1).strip()
-    return None
+    match = re.search(r"\b(?:near|in|around)\s+([a-zA-Z\s]+)", q)
+    if not match:
+        return None
+    location = match.group(1).strip()
+    # Trim common trailing qualifiers
+    stop_words = ["near me", "me", "open now", "best", "top", "cheap", "under", "below"]
+    for stop in stop_words:
+        if stop in location:
+            location = location.split(stop)[0].strip()
+    # Collapse extra spaces
+    location = re.sub(r"\s+", " ", location).strip()
+    return location or None
 
 
 @router.get("/nearby")
@@ -206,7 +209,9 @@ def unified_query(
         query_location = extract_location_hint(q)
         search_lat = lat
         search_lng = lng
+        cleaned_query = q
         if query_location:
+            cleaned_query = re.sub(r"\b(?:near|in|around)\s+" + re.escape(query_location), "", cleaned_query, flags=re.IGNORECASE).strip()
             geo = geocode_location(query_location)
             if geo:
                 search_lat = geo.get("lat")
@@ -223,21 +228,30 @@ def unified_query(
                     "mode": mode,
                     "message": "lat/lng missing and no location in query. Provide lat/lng or set DEFAULT_LAT/DEFAULT_LNG in .env"
                 }
-        data = nearby_search(q=q, lat=search_lat, lng=search_lng, radius=radius)
+        if query_location:
+            text_query = f"{cleaned_query or q} in {query_location}".strip()
+            raw = search_places_text(text_query, radius=radius, lat=search_lat, lng=search_lng)
+            normalized = normalize_places(raw)
+            ranked = rank_doctors(normalized, search_lat, search_lng)
+            data = {
+                "query": text_query,
+                "place_type": None,
+                "keyword": cleaned_query or q,
+                "results": ranked
+            }
+        else:
+            data = nearby_search(q=cleaned_query or q, lat=search_lat, lng=search_lng, radius=radius)
         data["mode"] = mode
         data["location_hint"] = query_location
         return data
 
-    payload = CrawlerAgenRequest(
-        name=None,
-        category="product",
-        query=q,
-        lat=lat,
-        lng=lng,
-        place_id=None,
-        include_transcripts=False,
-        max_transcripts=0
-    )
-    data = crawleragen(payload)
-    data["mode"] = mode
-    return data
+    products = search_shopping_products(q, num=10)
+    return {
+        "mode": mode,
+        "query": q,
+        "results": products.get("items", []),
+        "meta": {
+            "notes": [products.get("error")] if products.get("error") else [],
+            "details": [products.get("details")] if products.get("details") else []
+        }
+    }
