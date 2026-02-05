@@ -5,13 +5,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { 
   LayoutDashboard, Search, ChevronLeft, ChevronRight, SlidersHorizontal, 
-  MapPin, Star, X, Heart, History, Navigation, ArrowLeft, Mic, 
+  MapPin, Star, X, Heart, FileText, Navigation, ArrowLeft, Mic, // Replaced Report with FileText
   GitCompare, Youtube, MessageSquare, CheckCircle2, TrendingUp, Globe, Activity, ArrowRight,
-  MessageCircle, User, Clock, Sparkles, Trophy, Quote
+  MessageCircle, User, Clock ,AlertTriangle, 
+  Send
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
 import toast from 'react-hot-toast'; // Import toast
-import { apiGet, apiPost, buildQuery } from "@/lib/api";
+import ReportingSection from "@/component/ReportingSection"
 
 const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '700'] });
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600'] });
@@ -282,7 +283,7 @@ export default function DashboardPage() {
           <NavItem icon={<LayoutDashboard />} label="Dashboard" active={activeTab === "dashboard"} sidebarOpen={sidebarOpen} onClick={() => setActiveTab("dashboard")} />
           <NavItem icon={<Heart />} label="Favorites" active={activeTab === "favorites"} sidebarOpen={sidebarOpen} onClick={() => setActiveTab("favorites")} />
           <NavItem icon={<GitCompare />} label="Compare Multiple" active={activeTab === "compare"} sidebarOpen={sidebarOpen} onClick={() => setActiveTab("compare")} />
-          <NavItem icon={<History />} label="History" active={activeTab === "history"} sidebarOpen={sidebarOpen} onClick={() => setActiveTab("history")} />
+          <NavItem icon={<FileText  />} label="Reporting" active={activeTab === "Reporting"} sidebarOpen={sidebarOpen} onClick={() => setActiveTab("Reporting")} />
         </nav>
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="absolute -right-3 top-24 bg-white border border-slate-200 rounded-full p-1.5 hover:text-[#ff6b6b] shadow-sm">
           {sidebarOpen ? <ChevronLeft size={14}/> : <ChevronRight size={14}/>}
@@ -328,38 +329,49 @@ export default function DashboardPage() {
             </div>
           )}
         </header>
-
-        <main className="flex-1 overflow-y-auto p-8 bg-[#f8fcfc]">
-          <div className="max-w-7xl mx-auto">
-            {(activeTab === 'dashboard' || activeTab === 'favorites') && (
-              <>
-                <div className="flex justify-between items-end mb-8">
-                  <div>
-                    <h2 className={`text-3xl font-bold text-[#0d7377] ${dmSans.className}`}>{activeTab === "favorites" ? "Your Favorites" : "Find, Compare, Decide"}</h2>
-                    <p className="text-slate-500 font-medium mt-1">Showing verified data for San Francisco area</p>
-                  </div>
-                  <div className="bg-[#ff6b6b]/10 text-[#ff6b6b] px-4 py-2 rounded-xl text-sm font-black tracking-wide">{visibleItems.length} RESULTS</div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  <AnimatePresence mode="popLayout">
-                    {visibleItems.map((item) => (
-                      <ItemCard 
-                        key={item.id} 
-                        item={item} 
-                        isFavorite={favorites.includes(item.id)} 
-                        hasComments={!!userReviews[item.id]?.length}
-                        onFavoriteToggle={() => toggleFavorite(item.id)} 
-                        onDetailsClick={() => handleCompareDetails(item)} 
-                        onCommentClick={() => openCommentModal(item)}
-                      />
-                    ))}
-                  </AnimatePresence>
-                </div>
-              </>
-            )}
-            {activeTab === 'compare' && <CompareSection data={results} />}
+<main className="flex-1 overflow-y-auto p-8 bg-[#f8fcfc]">
+  <div className="max-w-7xl mx-auto">
+    
+    {/* 1. Dashboard & Favorites View */}
+    {(activeTab === 'dashboard' || activeTab === 'favorites') && (
+      <>
+        <div className="flex justify-between items-end mb-8">
+          <div>
+            <h2 className={`text-3xl font-bold text-[#0d7377] ${dmSans.className}`}>
+              {activeTab === "favorites" ? "Your Favorites" : "Find, Compare, Decide"}
+            </h2>
+            <p className="text-slate-500 font-medium mt-1">Showing verified data for San Francisco area</p>
           </div>
-        </main>
+          <div className="bg-[#ff6b6b]/10 text-[#ff6b6b] px-4 py-2 rounded-xl text-sm font-black tracking-wide">
+            {filteredItems.length} RESULTS
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <AnimatePresence mode="popLayout">
+            {filteredItems.map((item) => (
+              <ItemCard 
+                key={item.id} 
+                item={item} 
+                isFavorite={favorites.includes(item.id)} 
+                hasComments={!!userReviews[item.id]?.length}
+                onFavoriteToggle={() => toggleFavorite(item.id)} 
+                onDetailsClick={() => handleCompareDetails(item)} 
+                onCommentClick={() => openCommentModal(item)}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+      </>
+    )}
+
+    {/* 2. Compare View */}
+    {activeTab === 'compare' && <CompareSection data={API_DATA} />}
+
+    {/* 3. NEW: Reporting View (Add this to fix the blank screen) */}
+    {activeTab === 'Reporting' && <ReportingSection data={API_DATA} />}
+
+  </div>
+</main>
       </div>
 
       {/* FILTER DRAWER */}
@@ -775,3 +787,5 @@ function CompareRow({ label, icon, data, highlight = false }: { label: string, i
     </div>
   );
 }
+
+
