@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Search, ChevronLeft, ChevronRight, SlidersHorizontal, 
   MapPin, Star, X, Heart, History, Navigation, ArrowLeft, Mic, 
   GitCompare, Youtube, MessageSquare, CheckCircle2, TrendingUp, Globe, Activity, ArrowRight,
-  MessageCircle, User, Clock // Send removed as requested
+  MessageCircle, User, Clock, Sparkles, Trophy, Quote
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
 import toast from 'react-hot-toast'; // Import toast
@@ -183,17 +183,14 @@ export default function DashboardPage() {
   const saveComment = async (text: string, rating: number) => {
     if (!activeCommentItem) return;
 
-    // 1. Construct Payload according to schema
     const payload = {
       entity_id: activeCommentItem.id,
       entity_type: activeCommentItem.category || "service",
       name: activeCommentItem.name,
       rating: rating,
       review: text,
-      user_name: "Anonymous User", // You can replace this with actual user data if available
-      metadata: {
-        additionalProp1: {}
-      }
+      user_name: "Anonymous User",
+      metadata: { additionalProp1: {} }
     };
 
     try {
@@ -213,11 +210,9 @@ export default function DashboardPage() {
         }));
         toast.success("Review submitted successfully!");
       } else {
-        console.error("Failed to submit review:", response.statusText);
         toast.error("Failed to submit review. Please try again.");
       }
     } catch (error) {
-      console.error("Error submitting review:", error);
       toast.error("An error occurred while submitting your review.");
     }
   };
@@ -348,17 +343,35 @@ export default function DashboardPage() {
                 <button onClick={()=>setFilterDrawerOpen(false)} className="p-2 bg-slate-50 text-slate-400 rounded-full hover:text-[#ff6b6b] transition-colors"><X size={20}/></button>
               </div>
               <div className="space-y-8 flex-1">
-                {/* Filter Inputs */}
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Street / Area</label>
-                  <input type="text" className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm outline-none" value={streetQuery} onChange={(e) => setStreetQuery(e.target.value)} />
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Location</label>
+                  <input type="text" placeholder="e.g. Sutter Street" className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm focus:ring-1 focus:ring-[#0d7377] outline-none" value={streetQuery} onChange={(e) => setStreetQuery(e.target.value)} />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Max Price (${maxPrice})</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-4">Rating</label>
+                  <div className="flex gap-2">
+                    {[0, 3, 4, 4.5].map(r => (
+                      <button key={r} onClick={() => setMinRating(r)} className={`flex-1 py-3 rounded-xl border font-bold text-xs transition-all ${minRating === r ? "bg-[#0d7377] border-[#0d7377] text-white" : "bg-white border-slate-200"}`}>{r === 0 ? "Any" : `${r}+`} <Star size={10} className="inline ml-1 mb-1" /></button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Price (${maxPrice})</label>
                   <input type="range" min="50" max="1000" step="10" className="w-full accent-[#0d7377]" value={maxPrice} onChange={(e) => setMaxPrice(Number(e.target.value))} />
                 </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Distance ({maxDistance} KM)</label>
+                  <input type="range" min="0.005" max="0.05" step="0.005" className="w-full accent-[#0d7377]" value={maxDistance} onChange={(e) => setMaxDistance(Number(e.target.value))} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Availability</label>
+                  <button onClick={() => setOnlyOpen(!onlyOpen)} className={`w-full p-4 rounded-2xl border-2 flex justify-between items-center transition-all ${onlyOpen ? "border-[#0d7377] bg-[#0d7377]/5" : "border-slate-100"}`}>
+                    <span className="font-bold text-slate-700">Open Now</span>
+                    <div className={`w-10 h-5 rounded-full relative ${onlyOpen ? "bg-[#0d7377]" : "bg-slate-200"}`}><div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${onlyOpen ? "right-1" : "left-1"}`} /></div>
+                  </button>
+                </div>
               </div>
-              <button onClick={()=>setFilterDrawerOpen(false)} className="w-full py-4 bg-[#ff6b6b] text-white rounded-2xl font-black tracking-widest shadow-xl mt-6">APPLY FILTERS</button>
+              <button onClick={()=>setFilterDrawerOpen(false)} className="w-full py-4 bg-[#ff6b6b] text-white rounded-2xl font-black tracking-widest shadow-xl shadow-[#ff6b6b]/20 hover:scale-[1.02] active:scale-[0.98] transition-all shrink-0 mt-6">APPLY FILTERS</button>
             </motion.div>
           </>
         )}
@@ -449,32 +462,97 @@ function CompareSection({ data }: { data: any[] }) {
         )}
 
         {viewMode === "comparison" && (
-          <motion.div key="comparison-view" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-[40px] shadow-2xl shadow-[#0d7377]/10 border border-slate-100 overflow-hidden">
-            <div className="grid grid-cols-4 bg-slate-50/50 border-b border-slate-100">
-              <div className="p-6 md:p-8 flex items-center justify-center md:justify-start"><div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100"><Activity className="text-[#0d7377]" /></div></div>
-              {comparisonData.map((item, idx) => (
-                <div key={idx} className="p-6 md:p-8 border-l border-slate-100 text-center relative group">
-                  <img src={item.img || item.thumbnail} className="w-12 h-12 rounded-full object-cover mx-auto mb-3 border-2 border-white shadow-md" alt={item.name} />
-                  <h4 className="font-bold text-[#2B2D42] text-sm md:text-base leading-tight">{item.name}</h4>
-                  {item === bestProduct && <span className="absolute top-4 right-4 bg-[#ff6b6b] text-white text-[9px] font-black px-2 py-1 rounded-md uppercase tracking-wide animate-pulse">Best Choice</span>}
+          // --- UPDATED COMPARISON LAYOUT: SPLIT VIEW ---
+          <motion.div 
+            key="comparison-view" 
+            initial={{ opacity: 0, scale: 0.95 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            exit={{ opacity: 0, scale: 0.95 }} 
+            className="flex flex-col xl:flex-row gap-6 items-start"
+          >
+            {/* LEFT SIDE: COMPARISON TABLE (Takes majority space) */}
+            <div className="flex-1 w-full bg-white rounded-[40px] shadow-2xl shadow-[#0d7377]/5 border border-slate-100 overflow-hidden">
+                <div className="grid grid-cols-4 bg-slate-50/50 border-b border-slate-100">
+                    <div className="p-6 md:p-8 flex items-center justify-center md:justify-start">
+                        <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
+                            <Activity className="text-[#0d7377]" />
+                        </div>
+                    </div>
+                    {comparisonData.map((item, idx) => (
+                        <div key={idx} className="p-6 md:p-8 border-l border-slate-100 text-center relative group">
+                            <img src={item.img} className="w-16 h-16 rounded-full object-cover mx-auto mb-3 border-4 border-white shadow-md transition-transform group-hover:scale-110" alt={item.name} />
+                            <h4 className="font-bold text-[#2B2D42] text-sm md:text-base leading-tight mb-2">{item.name}</h4>
+                            {item === bestProduct && (
+                                <span className="inline-block bg-[#ff6b6b] text-white text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-wide shadow-lg shadow-[#ff6b6b]/30 animate-pulse">
+                                    Best Choice
+                                </span>
+                            )}
+                        </div>
+                    ))}
                 </div>
-              ))}
-            </div>
-            <div className="divide-y divide-slate-50">
-              <CompareRow label="System Score" icon={<TrendingUp size={16}/>} data={comparisonData.map(d => d.score ? `${d.score.toFixed(1)} / 110` : "N/A")} highlight={true} />
-              <CompareRow label="Reviews" icon={<Star size={16}/>} data={comparisonData.map(d => `${d.user_ratings_total || d.reviews || 0} reviews`)} />
-              <CompareRow label="Distance" icon={<Navigation size={16}/>} data={comparisonData.map(d => d.distance !== undefined ? `${d.distance} KM away` : "N/A")} />
-              <CompareRow label="Source" icon={<Globe size={16}/>} data={comparisonData.map(d => d.address || d.source || "N/A")} />
-            </div>
-            <div className="p-8 md:p-10 bg-gradient-to-br from-[#0d7377] to-[#0a5c5f] text-white relative overflow-hidden">
-              <div className="relative z-10 flex flex-col md:flex-row items-start gap-6">
-                <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center shrink-0 backdrop-blur-sm border border-white/10"><TrendingUp size={28} className="text-white" /></div>
-                <div>
-                  <h3 className="text-xl md:text-2xl font-bold mb-2 flex items-center gap-2">ComparatorX Recommendation <span className="bg-white/20 text-[10px] px-2 py-1 rounded-md font-black uppercase tracking-wider">AI Generated</span></h3>
-                  {bestProduct && <p className="text-white/90 leading-relaxed font-medium text-sm md:text-base max-w-3xl">After analyzing transcripts, sentiment, and hard metrics, <span className="text-white font-bold underline decoration-2 decoration-[#ff6b6b] underline-offset-4">{bestProduct.name}</span> emerges as the superior choice.</p>}
+                <div className="divide-y divide-slate-50">
+                    <CompareRow label="System Score" icon={<TrendingUp size={16}/>} data={comparisonData.map(d => d.score ? `${d.score.toFixed(1)} / 110` : "N/A")} highlight={true} />
+                    <CompareRow label="Patient Trust" icon={<Star size={16}/>} data={comparisonData.map(d => `${d.user_ratings_total} verified reviews`)} />
+                    <CompareRow label="Proximity" icon={<Navigation size={16}/>} data={comparisonData.map(d => `${d.distance} KM away`)} />
+                    <CompareRow label="Video Insights" icon={<Youtube size={16}/>} data={comparisonData.map(d => d.youtube_summary)} />
+                    <CompareRow label="Recent Feedback" icon={<MessageSquare size={16}/>} data={comparisonData.map(d => d.top_review)} />
+                    <CompareRow label="Website" icon={<Globe size={16}/>} data={comparisonData.map(d => d.website)} />
                 </div>
-              </div>
             </div>
+
+            {/* RIGHT SIDE: RECOMMENDATION PANEL (Sticky sidebar) */}
+            {bestProduct && (
+                <motion.div 
+                    initial={{ x: 50, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="w-full xl:w-80 shrink-0 sticky top-8"
+                >
+                    <div className="bg-gradient-to-br from-[#0d7377] to-[#094c4f] rounded-[32px] p-8 text-white shadow-2xl shadow-[#0d7377]/20 relative overflow-hidden">
+                        {/* Background Decor */}
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10" />
+                        <div className="absolute bottom-0 left-0 w-24 h-24 bg-[#ff6b6b]/20 rounded-full blur-2xl -ml-10 -mb-10" />
+
+                        <div className="relative z-10">
+                            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6 border border-white/10">
+                                <Trophy size={24} className="text-white" />
+                            </div>
+
+                            <h3 className="text-xl font-bold mb-1">ComparatorX Insight</h3>
+                            <div className="flex items-center gap-2 mb-6">
+                                <span className="w-2 h-2 bg-[#ff6b6b] rounded-full animate-pulse" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">AI Generated Analysis</span>
+                            </div>
+
+                            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 mb-6 border border-white/5">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <img src={bestProduct.img} className="w-10 h-10 rounded-full object-cover border-2 border-white/50" alt={bestProduct.name} />
+                                    <div>
+                                        <p className="text-xs font-bold opacity-80">Winner</p>
+                                        <p className="text-sm font-bold leading-tight">{bestProduct.name}</p>
+                                    </div>
+                                </div>
+                                <div className="h-px w-full bg-white/10 mb-3" />
+                                <div className="flex justify-between items-center text-xs font-medium">
+                                    <span>Match Score</span>
+                                    <span className="bg-white text-[#0d7377] px-2 py-0.5 rounded text-[10px] font-black">{bestProduct.score.toFixed(1)}</span>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="flex gap-3">
+                                    <Quote size={16} className="text-[#ff6b6b] shrink-0 mt-1" />
+                                    <p className="text-sm leading-relaxed text-white/90 font-medium">
+                                        Selected for highest proximity score and verified patient trust. This professional consistently outperforms in localized sentiment analysis.
+                                    </p>
+                                </div>
+                            </div>
+
+                            
+                        </div>
+                    </div>
+                </motion.div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -562,7 +640,7 @@ function CommentModal({ isOpen, onClose, item, comments, onSave }: any) {
                   onSave(newComment, rating);
                   setNewComment("");
                   setRating(0);
-                  onClose(); // Automatically close on Enter submit
+                  onClose(); 
                 }
               }}
             />
@@ -572,7 +650,7 @@ function CommentModal({ isOpen, onClose, item, comments, onSave }: any) {
                   onSave(newComment, rating);
                   setNewComment("");
                   setRating(0);
-                  onClose(); // Automatically close on Click submit
+                  onClose(); 
                 }
               }} 
               disabled={!newComment.trim() || rating === 0}
