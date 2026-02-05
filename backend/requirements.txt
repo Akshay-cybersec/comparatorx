@@ -10,3 +10,5 @@ python-dotenv
 youtube-transcript-api
 supadata
 pymongo
+transformers
+torch
