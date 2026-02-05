@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
 import toast from 'react-hot-toast';
+import { apiGet, apiPost, buildQuery } from "@/lib/api";
 
 const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '700'] });
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600'] });
@@ -29,44 +30,6 @@ const API_DATA = [
   { "id": "ChIJwZEqFuqAhYARni9P_qStdco", "name": "Rupsa R. Yee, M.D.", "rating": 4.8, "user_ratings_total": 95, "address": "1100 Van Ness Avenue, San Francisco", "distance": 0.012, "score": 107.39, "open_now": true, "category": "doctor", "price": 180, "reason": "High rating, very close to you, currently open", "img": "https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=400" }
 ];
 
-// --- 2. HARDCODED AI BOT RESPONSE ---
-const MOCK_AI_RESPONSE = {
-  "ai_used": true,
-  "ai_model": "zero-shot-transformer",
-  "ai_enhanced": true,
-  "intent": "product_search",
-  "confidence": 0.28824097514152525,
-  "entities": {
-    "product": "dress",
-    "size": "age 2-4 years",
-    "color": "black",
-    "brand": null,
-    "gender": "kids"
-  },
-  "query_used": "kids dress size age 2-4 years black buy online",
-  "reasoning": "Ranked by ecommerce domain preference and matches for product, color, size, and brand.",
-  "results": [
-    {
-      "title": "TEEVOS Girls Black Cotton Blend Frock",
-      "link": "https://www.amazon.in",
-      "snippet": "Amazon.in",
-      "price": "₹899"
-    },
-    {
-      "title": "Superminis Sleeveless Cotton Dress",
-      "link": "https://www.nykaafashion.com",
-      "snippet": "Nykaa Fashion",
-      "price": "₹1,250"
-    },
-    {
-      "title": "YK Kids- Girls Flutter Sleeve Dress",
-      "link": "https://www.myntra.com",
-      "snippet": "Myntra",
-      "price": "₹749"
-    }
-  ]
-};
-
 const DETAILED_MAPPING: Record<string, any> = {
   "ChIJ-0phpY6AhYARE_FYalDygAI": {
     "youtube_summary": "Expert in facelifts, mommy makeovers, and gynecomastia for 30+ years.",
@@ -80,17 +43,20 @@ const DETAILED_MAPPING: Record<string, any> = {
   }
 };
 
-export default function DashboardPage() {
+export default function DashboardPage({ initialTab = "dashboard" }: { initialTab?: string }) {
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState("all");
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [userReviews, setUserReviews] = useState<Record<string, any>>({});
   const [commentModalOpen, setCommentModalOpen] = useState(false);
   const [activeCommentItem, setActiveCommentItem] = useState<any>(null);
+  const [mode, setMode] = useState<string | null>(null);
+  const [results, setResults] = useState<any[]>([]);
+  const [isLoadingResults, setIsLoadingResults] = useState(false);
 
   const [isListening, setIsListening] = useState(false);
   const [currentPlaceholder, setCurrentPlaceholder] = useState(0);
@@ -101,6 +67,62 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [placeholders.length]);
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("dashboard_state");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.results) setResults(parsed.results);
+        if (parsed?.searchQuery) setSearchQuery(parsed.searchQuery);
+        if (parsed?.mode) setMode(parsed.mode);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("dashboard_state", JSON.stringify({
+        results,
+        searchQuery,
+        mode
+      }));
+    } catch {}
+  }, [results, searchQuery, mode]);
+
+  const getCoords = () =>
+    new Promise<{ lat: number; lng: number } | null>((resolve) => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    });
+
+  const fetchResults = useCallback(async () => {
+    const query = searchQuery.trim();
+    if (!query) return;
+    setIsLoadingResults(true);
+    try {
+      const coords = await getCoords();
+      const queryString = buildQuery({ q: query, lat: coords?.lat, lng: coords?.lng });
+      const data = await apiGet<any>(`/api/query?${queryString}`);
+      setMode(data.mode || null);
+      setResults(data.results || []);
+      try {
+        localStorage.setItem("dashboard_state", JSON.stringify({
+          results: data.results || [],
+          searchQuery: query,
+          mode: data.mode || null
+        }));
+      } catch {}
+    } catch (err) {
+      toast.error("Failed to fetch results");
+    } finally {
+      setIsLoadingResults(false);
+    }
+  }, [searchQuery]);
+
   const startListening = useCallback(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) { toast.error("Browser not supported"); return; }
@@ -108,9 +130,12 @@ export default function DashboardPage() {
     recognition.lang = 'en-US'; 
     recognition.onstart = () => setIsListening(true);
     recognition.onend = () => setIsListening(false);
-    recognition.onresult = (e: any) => setSearchQuery(e.results[0][0].transcript);
+    recognition.onresult = (e: any) => {
+      setSearchQuery(e.results[0][0].transcript);
+      setTimeout(() => fetchResults(), 0);
+    };
     recognition.start();
-  }, []);
+  }, [fetchResults]);
 
   // Filter States
   const [minRating, setMinRating] = useState(0);
@@ -124,7 +149,12 @@ export default function DashboardPage() {
   };
 
   const handleCompareDetails = (item: any) => {
+    const itemId = item.id || item.place_id || item.link || item.name;
     localStorage.setItem("comparison_item", JSON.stringify(item));
+    if (itemId) {
+      router.push(`/item/${encodeURIComponent(itemId)}`);
+      return;
+    }
     setActiveTab("compare");
   };
 
@@ -146,17 +176,38 @@ export default function DashboardPage() {
   const filteredItems = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     const street = streetQuery.toLowerCase().trim();
-    let baseItems = activeTab === "favorites" ? API_DATA.filter(item => favorites.includes(item.id)) : API_DATA;
+    let baseItems = activeTab === "favorites"
+      ? results.filter(item => favorites.includes(item.id || item.place_id || item.link || item.name))
+      : results;
     return baseItems.filter(item => {
-      return (item.name.toLowerCase().includes(query) || item.address.toLowerCase().includes(query)) &&
+      const name = (item.name || item.title || "").toLowerCase();
+      const address = (item.address || item.snippet || "").toLowerCase();
+      const rating = typeof item.rating === "number" ? item.rating : 0;
+      const open = item.open_now ?? false;
+      const rawPrice = item.price ?? item.current_price ?? null;
+      const price = typeof rawPrice === "number" ? rawPrice : Number(String(rawPrice || "").replace(/[^\d.]/g, ""));
+      const hasPrice = Number.isFinite(price);
+      const distance = typeof item.distance === "number" ? item.distance : null;
+      const hasDistance = distance !== null;
+      const isProductMode = mode === "product";
+      const useQueryFilter = query !== "" && !(mode && results.length > 0);
+      const matchesSearch = !useQueryFilter || name.includes(query) || address.includes(query);
+      const priceOk = isProductMode ? (!hasPrice || price <= maxPrice) : (!hasPrice || price <= maxPrice);
+      const distanceOk = isProductMode ? true : (!hasDistance || distance <= maxDistance);
+      const openOk = isProductMode ? true : (!onlyOpen || open);
+      return matchesSearch &&
              (selectedType === "all" || item.category === selectedType) &&
-             item.rating >= minRating &&
-             (!onlyOpen || item.open_now) &&
-             item.price <= maxPrice &&
-             item.distance <= maxDistance &&
-             (street === "" || item.address.toLowerCase().includes(street));
-    }).sort((a, b) => b.score - a.score);
-  }, [searchQuery, selectedType, minRating, onlyOpen, maxPrice, maxDistance, streetQuery, activeTab, favorites]);
+             rating >= minRating &&
+             openOk &&
+             priceOk &&
+             distanceOk &&
+             (street === "" || address.includes(street));
+    }).sort((a, b) => {
+      const scoreA = typeof a.score === "number" ? a.score : 0;
+      const scoreB = typeof b.score === "number" ? b.score : 0;
+      return scoreB - scoreA;
+    });
+  }, [searchQuery, selectedType, minRating, onlyOpen, maxPrice, maxDistance, streetQuery, activeTab, favorites, results, mode]);
 
   return (
     <div className={`h-screen w-full bg-[#f8fcfc] text-[#2B2D42] ${inter.className} flex overflow-hidden`}>
@@ -170,7 +221,7 @@ export default function DashboardPage() {
         <nav className="flex-1 p-4 space-y-2">
           <NavItem icon={<LayoutDashboard />} label="Dashboard" active={activeTab === "dashboard"} sidebarOpen={sidebarOpen} onClick={() => setActiveTab("dashboard")} />
           <NavItem icon={<Heart />} label="Favorites" active={activeTab === "favorites"} sidebarOpen={sidebarOpen} onClick={() => setActiveTab("favorites")} />
-          <NavItem icon={<GitCompare />} label="Compare Multiple" active={activeTab === "compare"} sidebarOpen={sidebarOpen} onClick={() => setActiveTab("compare")} />
+          <NavItem icon={<GitCompare />} label="Compare Multiple" active={activeTab === "compare"} sidebarOpen={sidebarOpen} onClick={() => router.push("/compare")} />
           <NavItem icon={<Bot />} label="Personalised AI Bot" active={activeTab === "ai-bot"} sidebarOpen={sidebarOpen} onClick={() => setActiveTab("ai-bot")} />
         </nav>
         <button onClick={() => setSidebarOpen(!sidebarOpen)} className="absolute -right-3 top-24 bg-white border border-slate-200 rounded-full p-1.5 hover:text-[#ff6b6b] shadow-sm">
@@ -184,8 +235,25 @@ export default function DashboardPage() {
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-4 items-center">
             <div className="flex-1 relative w-full group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input type="text" placeholder={placeholders[currentPlaceholder]} className="w-full pl-12 pr-14 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-[#0d7377] transition-all font-medium" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              <input
+                type="text"
+                placeholder={placeholders[currentPlaceholder]}
+                className="w-full pl-12 pr-14 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-[#0d7377] transition-all font-medium"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    fetchResults();
+                  }
+                }}
+              />
               <button onClick={startListening} className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full transition-all duration-300 ${isListening ? 'text-red-500 bg-red-100 scale-110 shadow-md' : 'text-slate-400 hover:text-[#0d7377] hover:bg-slate-100'}`}><Mic size={20} className={isListening ? "animate-pulse" : ""} /></button>
+              {isLoadingResults && (
+                <div className="absolute right-14 top-1/2 -translate-y-1/2">
+                  <div className="w-5 h-5 rounded-full border-2 border-[#0d7377] border-t-transparent animate-spin" />
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <button onClick={() => setFilterDrawerOpen(true)} className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 rounded-2xl font-semibold text-slate-600 hover:border-[#ff6b6b] hover:text-[#ff6b6b] transition-all"><SlidersHorizontal size={18} /> Filters</button>
@@ -207,14 +275,25 @@ export default function DashboardPage() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-20">
                   <AnimatePresence mode="popLayout">
-                    {filteredItems.map((item) => (
-                      <ItemCard key={item.id} item={item} isFavorite={favorites.includes(item.id)} hasComments={!!userReviews[item.id]?.length} onFavoriteToggle={() => toggleFavorite(item.id)} onDetailsClick={() => handleCompareDetails(item)} onCommentClick={() => openCommentModal(item)} />
-                    ))}
+                    {filteredItems.map((item) => {
+                      const itemId = item.id || item.place_id || item.link || item.name;
+                      return (
+                        <ItemCard
+                          key={itemId}
+                          item={item}
+                          isFavorite={favorites.includes(itemId)}
+                          hasComments={!!userReviews[itemId]?.length}
+                          onFavoriteToggle={() => toggleFavorite(itemId)}
+                          onDetailsClick={() => handleCompareDetails(item)}
+                          onCommentClick={() => openCommentModal(item)}
+                        />
+                      );
+                    })}
                   </AnimatePresence>
                 </div>
               </>
             )}
-            {activeTab === 'compare' && <CompareSection data={API_DATA} />}
+            {activeTab === 'compare' && <CompareSection data={results} />}
             {activeTab === 'ai-bot' && <AIBotInterface />}
           </div>
         </main>
@@ -255,16 +334,24 @@ function AIBotInterface() {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, isTyping]);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    setMessages(prev => [...prev, { role: 'user', text: input, type: 'text' }]);
+  const handleSend = async () => {
+    const message = input.trim();
+    if (!message) return;
+    setMessages(prev => [...prev, { role: 'user', text: message, type: 'text' }]);
     setInput("");
     setIsTyping(true);
-
-    setTimeout(() => {
+    try {
+      const data = await apiPost<any>("/api/aibot", { message });
+      setMessages(prev => [...prev, { role: 'bot', data, type: 'ai_result' }]);
+    } catch (err) {
+      toast.error("Failed to fetch AI response");
+      setMessages(prev => [
+        ...prev,
+        { role: 'bot', text: "Sorry, I couldn't fetch results right now.", type: 'text' }
+      ]);
+    } finally {
       setIsTyping(false);
-      setMessages(prev => [...prev, { role: 'bot', data: MOCK_AI_RESPONSE, type: 'ai_result' }]);
-    }, 1500);
+    }
   };
 
   return (
@@ -330,12 +417,19 @@ function AIResponseCard({ data }: any) {
         </div>
       </div>
       <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar -mx-2 px-2">
-        {data.results.map((item: any, i: number) => (
+        {(data.results || []).map((item: any, i: number) => (
           <motion.div key={i} whileHover={{ y: -5 }} className="min-w-[260px] bg-white rounded-2xl border border-slate-100 p-4 shadow-sm flex flex-col justify-between group">
             <div>
-                <div className="h-28 bg-slate-50 rounded-xl mb-3 flex items-center justify-center relative"><ShoppingBag size={32} className="text-slate-200" /><div className="absolute top-2 right-2 bg-white px-2 py-1 rounded text-[9px] font-black text-[#0d7377] shadow-sm">{item.snippet}</div></div>
+                <div className="h-28 bg-slate-50 rounded-xl mb-3 flex items-center justify-center relative overflow-hidden">
+                  {item.image ? (
+                    <img src={item.image} alt={item.title || "Product"} className="w-full h-full object-cover" />
+                  ) : (
+                    <ShoppingBag size={32} className="text-slate-200" />
+                  )}
+                  <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded text-[9px] font-black text-[#0d7377] shadow-sm">{item.snippet}</div>
+                </div>
                 <h4 className="font-bold text-slate-800 text-xs leading-tight mb-2 line-clamp-2">{item.title}</h4>
-                <p className="text-base font-black text-slate-900 mb-3">{item.price}</p>
+                <p className="text-base font-black text-slate-900 mb-3">{item.price || "N/A"}</p>
             </div>
             <a href={item.link} target="_blank" className="w-full py-2.5 bg-slate-50 text-slate-600 rounded-xl text-[10px] font-bold flex items-center justify-center gap-2 hover:bg-[#ff6b6b] hover:text-white transition-all uppercase tracking-widest">View <ExternalLink size={12} /></a>
           </motion.div>
@@ -363,17 +457,19 @@ function ItemCard({ item, isFavorite, onFavoriteToggle, onDetailsClick, onCommen
   return (
     <motion.div layout className="bg-white rounded-[32px] border border-slate-100 p-4 shadow-sm hover:shadow-xl transition-all flex flex-col group relative">
       <div className="relative h-44 rounded-[24px] overflow-hidden mb-4">
-        <img src={item.img} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+        <img src={item.img || item.image} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
         <div className="absolute top-3 left-3 bg-white/95 backdrop-blur px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm border border-slate-100">
           <Star size={12} className="text-[#0d7377] fill-[#0d7377]" />
           <span className="text-xs font-black text-[#0d7377]">{item.rating}</span>
         </div>
       </div>
       <div className="flex-1 px-1">
-          <h3 className="font-bold text-[#2B2D42] text-sm leading-tight mb-2 h-10 line-clamp-2">{item.name}</h3>
+          <h3 className="font-bold text-[#2B2D42] text-sm leading-tight mb-2 h-10 line-clamp-2">{item.name || item.title}</h3>
           <div className="space-y-2 mb-4">
-            <div className="flex items-center gap-2 text-slate-400"><MapPin size={12}/><p className="text-[10px] font-semibold truncate">{item.address}</p></div>
-            <div className="text-[#0d7377] font-black text-[9px] tracking-widest bg-[#0d7377]/5 w-fit px-2 py-1 rounded-lg uppercase">{item.distance} KM AWAY</div>
+            <div className="flex items-center gap-2 text-slate-400"><MapPin size={12}/><p className="text-[10px] font-semibold truncate">{item.address || item.snippet}</p></div>
+            {typeof item.distance === "number" && (
+              <div className="text-[#0d7377] font-black text-[9px] tracking-widest bg-[#0d7377]/5 w-fit px-2 py-1 rounded-lg uppercase">{item.distance} KM AWAY</div>
+            )}
           </div>
       </div>
       <div className="flex gap-2">
@@ -413,5 +509,78 @@ function CommentModal({ isOpen, onClose, item, comments, onSave }: any) {
   );
 }
 
-function CompareSection({ data }: { data: any[] }) { return <div className="p-20 text-center text-slate-400 italic">Select items from dashboard to start comparison analysis.</div>; }
+function CompareSection({ data }: { data: any[] }) {
+  const router = useRouter();
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const toggleSelect = (item: any) => {
+    const id = item.id || item.place_id || item.link || item.name;
+    if (!id) return;
+    setSelectedIds(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id);
+      if (prev.length >= 3) return prev;
+      return [...prev, id];
+    });
+  };
+  const handleCompare = () => {
+    const selectedItems = data.filter(item => {
+      const id = item.id || item.place_id || item.link || item.name;
+      return id && selectedIds.includes(id);
+    });
+    localStorage.setItem("compare_items", JSON.stringify(selectedItems));
+    router.push("/compare");
+  };
+  if (!data || data.length === 0) {
+    return <div className="p-20 text-center text-slate-400 italic">No results to compare yet.</div>;
+  }
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold text-slate-500">Select 2–3 items to compare</div>
+        <button
+          onClick={handleCompare}
+          disabled={selectedIds.length < 2}
+          className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+            selectedIds.length < 2
+              ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+              : "bg-[#0d7377] text-white hover:bg-[#0b5c5f]"
+          }`}
+        >
+          Compare Selected ({selectedIds.length})
+        </button>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {data.map((item: any, idx: number) => {
+          const id = item.id || item.place_id || item.link || item.name || idx;
+          const selected = selectedIds.includes(id);
+          return (
+            <motion.div
+              key={id}
+              whileHover={{ y: -5 }}
+              onClick={() => toggleSelect(item)}
+              className={`bg-white rounded-2xl border p-4 shadow-sm flex flex-col justify-between cursor-pointer transition-all ${
+                selected ? "border-[#0d7377] ring-2 ring-[#0d7377]/20" : "border-slate-100"
+              }`}
+            >
+              <div>
+                <div className="h-32 bg-slate-50 rounded-xl mb-3 overflow-hidden flex items-center justify-center">
+                  {item.image || item.img ? (
+                    <img src={item.image || item.img} alt={item.name || item.title || "Item"} className="w-full h-full object-cover" />
+                  ) : (
+                    <ShoppingBag size={28} className="text-slate-300" />
+                  )}
+                </div>
+                <h4 className="font-bold text-slate-800 text-sm leading-tight mb-2 line-clamp-2">{item.name || item.title}</h4>
+                <p className="text-xs text-slate-500 line-clamp-2">{item.address || item.snippet || ""}</p>
+                <p className="text-base font-black text-slate-900 mt-3">{item.price || "N/A"}</p>
+              </div>
+              {item.link && (
+                <a href={item.link} target="_blank" className="mt-4 w-full py-2.5 bg-slate-50 text-slate-600 rounded-xl text-[10px] font-bold flex items-center justify-center gap-2 hover:bg-[#ff6b6b] hover:text-white transition-all uppercase tracking-widest">View <ExternalLink size={12} /></a>
+              )}
+            </motion.div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 function CompareRow({ label, icon, data, highlight = false }: any) { return null; }
