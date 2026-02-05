@@ -10,6 +10,8 @@ API_KEY = os.getenv("GOOGLE_API_KEY")
 
 NEARBY_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
 DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
+GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
+PHOTO_URL = "https://maps.googleapis.com/maps/api/place/photo"
 
 def search_doctors(lat: float, lng: float, radius=3000):
     cache_key = f"doctors:{lat}:{lng}:{radius}"
@@ -65,10 +67,16 @@ def search_places(lat: float, lng: float, radius=3000, place_type: Optional[str]
     return results
 
 
+def build_photo_url(photo_reference: str, max_width: int = 800):
+    if not photo_reference:
+        return None
+    return f"{PHOTO_URL}?maxwidth={max_width}&photo_reference={photo_reference}&key={API_KEY}"
+
+
 def get_place_details(place_id: str):
     params = {
         "place_id": place_id,
-        "fields": "opening_hours,types",
+        "fields": "opening_hours,types,photos",
         "key": API_KEY
     }
     res = requests.get(DETAILS_URL, params=params, timeout=10)
@@ -85,3 +93,19 @@ def get_place_details_full(place_id: str):
     res = requests.get(DETAILS_URL, params=params, timeout=10)
     data = res.json()
     return data.get("result", {})
+
+
+def geocode_location(query: str):
+    if not API_KEY:
+        return None
+    params = {
+        "address": query,
+        "key": API_KEY
+    }
+    res = requests.get(GEOCODE_URL, params=params, timeout=10)
+    data = res.json()
+    results = data.get("results", [])
+    if not results:
+        return None
+    location = results[0].get("geometry", {}).get("location")
+    return location

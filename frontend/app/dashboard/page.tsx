@@ -10,7 +10,8 @@ import {
   MessageCircle, User, Clock, Sparkles, Trophy, Quote
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
-import toast from 'react-hot-toast';
+import toast from 'react-hot-toast'; // Import toast
+import { apiGet, apiPost, buildQuery } from "@/lib/api";
 
 const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '700'] });
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600'] });
@@ -66,6 +67,9 @@ export default function DashboardPage() {
   const [selectedType, setSelectedType] = useState("all");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [results, setResults] = useState<any[]>(API_DATA);
+  const [isLoadingResults, setIsLoadingResults] = useState(false);
+  const [mode, setMode] = useState<string | null>(null);
   
   // --- Comment System State ---
   const [userReviews, setUserReviews] = useState<Record<string, Array<{ text: string, rating: number, date: string }>>>({});
@@ -82,6 +86,64 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [placeholders.length]);
 
+  const getCoords = () =>
+    new Promise<{ lat: number; lng: number } | null>((resolve) => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    });
+
+  const fetchResults = useCallback(async () => {
+    const query = searchQuery.trim();
+    if (!query) return;
+    setIsLoadingResults(true);
+    try {
+      const coords = await getCoords();
+      const queryString = buildQuery({
+        q: query,
+        lat: coords?.lat,
+        lng: coords?.lng
+      });
+      const data = await apiGet<any>(`/api/query?${queryString}`);
+      setMode(data.mode || null);
+        if (data.mode === "product") {
+          const mapped = (data.results || []).map((item: any, idx: number) => ({
+            id: item.url || `product:${idx}`,
+            name: item.name || query,
+            category: "product",
+            rating: item.rating ?? 0,
+            user_ratings_total: item.reviews ?? 0,
+            address: item.source || "Google Shopping",
+            distance: 0,
+            score: item.rating ? item.rating * 20 : 50,
+            open_now: false,
+            price: item.price ?? 0,
+            extra: item,
+            product_url: item.url,
+            img: item.thumbnail || "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&q=80&w=800",
+            reason: item.source ? `Sourced from ${item.source}` : "Shopping result"
+          }));
+          setResults(mapped);
+        } else {
+        const mapped = (data.results || []).map((item: any) => ({
+          ...item,
+          id: item.place_id || item.id,
+          price: item.price ?? 0,
+          img: item.img || item.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || "X")}&background=0d7377&color=ffffff`
+        }));
+        setResults(mapped);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to fetch results");
+    } finally {
+      setIsLoadingResults(false);
+    }
+  }, [searchQuery]);
+
   const startListening = useCallback(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) { toast.error("Browser not supported"); return; }
@@ -89,9 +151,12 @@ export default function DashboardPage() {
     recognition.lang = 'en-US'; 
     recognition.onstart = () => setIsListening(true);
     recognition.onend = () => setIsListening(false);
-    recognition.onresult = (e: any) => setSearchQuery(e.results[0][0].transcript);
+    recognition.onresult = (e: any) => {
+      setSearchQuery(e.results[0][0].transcript);
+      setTimeout(() => fetchResults(), 0);
+    };
     recognition.start();
-  }, []);
+  }, [fetchResults]);
 
   // Filter States
   const [minRating, setMinRating] = useState(0);
@@ -106,7 +171,7 @@ export default function DashboardPage() {
 
   const handleCompareDetails = (item: any) => {
     localStorage.setItem("comparison_item", JSON.stringify(item));
-    setActiveTab("compare");
+    router.push(`/item/${encodeURIComponent(item.id)}`);
   };
 
   // --- Updated: Async Comment Handler with API Call ---
@@ -129,14 +194,16 @@ export default function DashboardPage() {
     };
 
     try {
-      const response = await fetch('/api/reviews', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      // 2. Call the API
+      const response = await apiPost<any>('/api/reviews', payload);
 
-      if (response.ok) {
-        const newReview = { text, rating, date: new Date().toLocaleDateString() };
+      if (response) {
+        // 3. Update Local State on Success
+        const newReview = {
+          text,
+          rating,
+          date: new Date().toLocaleDateString()
+        };
         setUserReviews(prev => ({
           ...prev,
           [activeCommentItem.id]: [...(prev[activeCommentItem.id] || []), newReview]
@@ -153,17 +220,24 @@ export default function DashboardPage() {
   const filteredItems = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     const street = streetQuery.toLowerCase().trim();
-    let baseItems = activeTab === "favorites" ? API_DATA.filter(item => favorites.includes(item.id)) : API_DATA;
+    let baseItems = activeTab === "favorites" ? results.filter(item => favorites.includes(item.id)) : results;
     return baseItems.filter(item => {
-      return (item.name.toLowerCase().includes(query) || item.address.toLowerCase().includes(query)) &&
+      const name = (item.name || "").toLowerCase();
+      const address = (item.address || "").toLowerCase();
+      const price = item.price ?? 0;
+      const distance = item.distance ?? 0;
+      const rating = item.rating ?? 0;
+      const open = item.open_now ?? false;
+      const matchesQuery = mode ? true : (name.includes(query) || address.includes(query));
+      return matchesQuery &&
              (selectedType === "all" || item.category === selectedType) &&
-             item.rating >= minRating &&
-             (!onlyOpen || item.open_now) &&
-             item.price <= maxPrice &&
-             item.distance <= maxDistance &&
-             (street === "" || item.address.toLowerCase().includes(street));
+             rating >= minRating &&
+             (!onlyOpen || open) &&
+             price <= maxPrice &&
+             distance <= maxDistance &&
+             (street === "" || address.includes(street));
     }).sort((a, b) => b.score - a.score);
-  }, [searchQuery, selectedType, minRating, onlyOpen, maxPrice, maxDistance, streetQuery, activeTab, favorites]);
+  }, [searchQuery, selectedType, minRating, onlyOpen, maxPrice, maxDistance, streetQuery, activeTab, favorites, mode]);
 
   return (
     <div className={`h-screen w-full bg-[#f8fcfc] text-[#2B2D42] ${inter.className} flex overflow-hidden`}>
@@ -191,8 +265,25 @@ export default function DashboardPage() {
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-4 items-center">
             <div className="flex-1 relative w-full group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input type="text" placeholder={placeholders[currentPlaceholder]} className="w-full pl-12 pr-14 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-[#0d7377] transition-all font-medium" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              <input
+                type="text"
+                placeholder={placeholders[currentPlaceholder]}
+                className="w-full pl-12 pr-14 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-[#0d7377] transition-all font-medium"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    fetchResults();
+                  }
+                }}
+              />
               <button onClick={startListening} className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full transition-all duration-300 ${isListening ? 'text-red-500 bg-red-100 scale-110 shadow-md' : 'text-slate-400 hover:text-[#0d7377] hover:bg-slate-100'}`}><Mic size={20} className={isListening ? "animate-pulse" : ""} /></button>
+              {isLoadingResults && (
+                <div className="absolute right-14 top-1/2 -translate-y-1/2">
+                  <div className="w-5 h-5 rounded-full border-2 border-[#0d7377] border-t-transparent animate-spin" />
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <button onClick={() => setFilterDrawerOpen(true)} className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 rounded-2xl font-semibold text-slate-600 hover:border-[#ff6b6b] hover:text-[#ff6b6b] transition-all"><SlidersHorizontal size={18} /> Filters</button>
@@ -236,7 +327,7 @@ export default function DashboardPage() {
                 </div>
               </>
             )}
-            {activeTab === 'compare' && <CompareSection data={API_DATA} />}
+            {activeTab === 'compare' && <CompareSection data={results} />}
           </div>
         </main>
       </div>
@@ -312,11 +403,7 @@ function CompareSection({ data }: { data: any[] }) {
   };
 
   const comparisonData = useMemo(() => {
-    return selectedIds.map(id => {
-      const basic = data.find(r => r.id === id);
-      const detailed = DETAILED_MAPPING[id] || DETAILED_MAPPING["default"];
-      return { ...basic, ...detailed };
-    });
+    return selectedIds.map(id => data.find(r => r.id === id)).filter(Boolean);
   }, [selectedIds, data]);
 
   const bestProduct = useMemo(() => {
@@ -350,7 +437,7 @@ function CompareSection({ data }: { data: any[] }) {
             {data.map((item) => (
               <motion.div key={item.id} variants={itemVariants} onClick={() => toggleSelection(item.id)} whileHover={{ y: -5 }} className={`relative cursor-pointer rounded-[24px] p-3 border-2 transition-all duration-300 bg-white shadow-sm hover:shadow-xl ${selectedIds.includes(item.id) ? "border-[#0d7377] ring-4 ring-[#0d7377]/10" : "border-transparent hover:border-slate-200"}`}>
                 <div className="relative h-40 rounded-[20px] bg-slate-100 mb-3 overflow-hidden group">
-                  <img src={item.img} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={item.name} />
+                  <img src={item.img || item.thumbnail} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={item.name} />
                   <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-sm">
                     <Star size={10} className="fill-[#0d7377] text-[#0d7377]" /> {item.rating}
                   </div>
@@ -583,10 +670,25 @@ function CommentModal({ isOpen, onClose, item, comments, onSave }: any) {
 }
 
 function ItemCard({ item, isFavorite, onFavoriteToggle, onDetailsClick, onCommentClick, hasComments }: any) {
+  const [imgError, setImgError] = useState(false);
+  const imgSrc = item.img || item.thumbnail || "";
+  const showFallback = imgError || !imgSrc;
   return (
     <motion.div layout initial={{opacity:0, scale:0.9}} animate={{opacity:1, scale:1}} exit={{opacity:0, scale:0.9}} className="bg-white rounded-[32px] border border-slate-100 p-4 shadow-sm hover:shadow-xl hover:shadow-[#0d7377]/10 transition-all flex flex-col group relative">
       <div className="relative h-44 rounded-[24px] overflow-hidden mb-4">
-        <img src={item.img} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={item.name} />
+        {!showFallback ? (
+          <img
+            src={imgSrc}
+            loading="lazy"
+            onError={() => setImgError(true)}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+            alt={item.name}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0d7377]/10 to-[#ff6b6b]/10 text-[#0d7377] font-black text-3xl">
+            {(item.name || "?").slice(0, 1).toUpperCase()}
+          </div>
+        )}
         <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm border border-slate-100">
           <Star size={12} className="text-[#0d7377] fill-[#0d7377]" />
           <span className="text-xs font-black text-[#0d7377]">{item.rating}</span>
