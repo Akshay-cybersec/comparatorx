@@ -5,12 +5,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { 
   LayoutDashboard, Search, ChevronLeft, ChevronRight, SlidersHorizontal, 
-  MapPin, Star, X, Heart, History, Navigation, ArrowLeft, Mic, 
+  MapPin, Star, X, Heart, FileText, Navigation, ArrowLeft, Mic, 
   GitCompare, Youtube, MessageSquare, CheckCircle2, TrendingUp, Globe, Activity, ArrowRight,
   MessageCircle, User, Clock, Sparkles, Trophy, Quote, Bot, Send, ShoppingBag, Target, BrainCircuit, ExternalLink
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
 import toast from 'react-hot-toast';
+import ReportingSection from "@/component/ReportingSection"; // Ensure this path is correct
 
 const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '700'] });
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600'] });
@@ -101,6 +102,57 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [placeholders.length]);
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("dashboard_state");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.results) setResults(parsed.results);
+        if (parsed?.searchQuery) setSearchQuery(parsed.searchQuery);
+        if (parsed?.mode) setMode(parsed.mode);
+      }
+    } catch {}
+  }, []);
+
+  // --- UPDATED REALISTIC FILTERS ---
+  // Defaults set for a "Services" context (Doctors/Gyms)
+  const [minRating, setMinRating] = useState(0);
+  const [onlyOpen, setOnlyOpen] = useState(false);
+  const [maxPrice, setMaxPrice] = useState(500); // More realistic max for a doctor/service fee ($500)
+  const [maxDistance, setMaxDistance] = useState(10); // 10km is a realistic max for local services
+  const [streetQuery, setStreetQuery] = useState("");
+
+  const getCoords = () =>
+    new Promise<{ lat: number; lng: number } | null>((resolve) => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    });
+
+  const apiGet = async (url: string) => { return { mode: 'doctor', results: API_DATA } }; 
+  const apiPost = async (url: string, data: any) => { return { success: true } };
+  const buildQuery = (params: any) => new URLSearchParams(params).toString();
+
+  const fetchResults = useCallback(async () => {
+    const query = searchQuery.trim();
+    if (!query) return;
+    setIsLoadingResults(true);
+    try {
+      const coords = await getCoords();
+      const queryString = buildQuery({ q: query, lat: coords?.lat, lng: coords?.lng });
+      const data = await apiGet(`/api/query?${queryString}`);
+      setMode(data.mode || null);
+      setResults(API_DATA); 
+    } catch (err) {
+      toast.error("Failed to fetch results");
+    } finally {
+      setIsLoadingResults(false);
+    }
+  }, [searchQuery]);
+
   const startListening = useCallback(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) { toast.error("Browser not supported"); return; }
@@ -108,16 +160,12 @@ export default function DashboardPage() {
     recognition.lang = 'en-US'; 
     recognition.onstart = () => setIsListening(true);
     recognition.onend = () => setIsListening(false);
-    recognition.onresult = (e: any) => setSearchQuery(e.results[0][0].transcript);
+    recognition.onresult = (e: any) => {
+      setSearchQuery(e.results[0][0].transcript);
+      setTimeout(() => fetchResults(), 0);
+    };
     recognition.start();
-  }, []);
-
-  // Filter States
-  const [minRating, setMinRating] = useState(0);
-  const [onlyOpen, setOnlyOpen] = useState(false);
-  const [maxPrice, setMaxPrice] = useState(1000);
-  const [maxDistance, setMaxDistance] = useState(0.05);
-  const [streetQuery, setStreetQuery] = useState("");
+  }, [fetchResults]);
 
   const toggleFavorite = (id: string) => {
     setFavorites(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
@@ -125,7 +173,7 @@ export default function DashboardPage() {
 
   const handleCompareDetails = (item: any) => {
     localStorage.setItem("comparison_item", JSON.stringify(item));
-    setActiveTab("compare");
+    router.push(`/item/${encodeURIComponent(item.id)}`);
   };
 
   const openCommentModal = (item: any) => {
@@ -143,20 +191,38 @@ export default function DashboardPage() {
     toast.success("Review submitted!");
   };
 
+  // --- FILTERING LOGIC ---
   const filteredItems = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     const street = streetQuery.toLowerCase().trim();
-    let baseItems = activeTab === "favorites" ? API_DATA.filter(item => favorites.includes(item.id)) : API_DATA;
+    let baseItems = activeTab === "favorites" ? results.filter(item => favorites.includes(item.id)) : results;
+
     return baseItems.filter(item => {
-      return (item.name.toLowerCase().includes(query) || item.address.toLowerCase().includes(query)) &&
-             (selectedType === "all" || item.category === selectedType) &&
-             item.rating >= minRating &&
-             (!onlyOpen || item.open_now) &&
-             item.price <= maxPrice &&
-             item.distance <= maxDistance &&
-             (street === "" || item.address.toLowerCase().includes(street));
+      const name = (item.name || "").toLowerCase();
+      const address = (item.address || "").toLowerCase();
+      const price = item.price ?? 0;
+      const distance = item.distance ?? 0;
+      const rating = item.rating ?? 0;
+      const open = item.open_now ?? false;
+
+      const matchesSearch = (name.includes(query) || address.includes(query));
+      const matchesType = (mode === 'product') ? true : (selectedType === "all" || item.category === selectedType);
+      const matchesRating = rating >= minRating;
+      const matchesPrice = price <= maxPrice;
+      const matchesLocation = street === "" || address.includes(street);
+      
+      let matchesOpen = true;
+      let matchesDistance = true;
+
+      if (mode !== 'product') {
+         matchesOpen = !onlyOpen || open;
+         matchesDistance = distance <= maxDistance; 
+      }
+
+      return matchesSearch && matchesType && matchesRating && matchesPrice && matchesLocation && matchesOpen && matchesDistance;
+
     }).sort((a, b) => b.score - a.score);
-  }, [searchQuery, selectedType, minRating, onlyOpen, maxPrice, maxDistance, streetQuery, activeTab, favorites]);
+  }, [searchQuery, selectedType, minRating, onlyOpen, maxPrice, maxDistance, streetQuery, activeTab, favorites, mode, results]);
 
   return (
     <div className={`h-screen w-full bg-[#f8fcfc] text-[#2B2D42] ${inter.className} flex overflow-hidden`}>
@@ -184,8 +250,25 @@ export default function DashboardPage() {
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-4 items-center">
             <div className="flex-1 relative w-full group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input type="text" placeholder={placeholders[currentPlaceholder]} className="w-full pl-12 pr-14 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-[#0d7377] transition-all font-medium" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              <input
+                type="text"
+                placeholder={placeholders[currentPlaceholder]}
+                className="w-full pl-12 pr-14 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-[#0d7377] transition-all font-medium"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    fetchResults();
+                  }
+                }}
+              />
               <button onClick={startListening} className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full transition-all duration-300 ${isListening ? 'text-red-500 bg-red-100 scale-110 shadow-md' : 'text-slate-400 hover:text-[#0d7377] hover:bg-slate-100'}`}><Mic size={20} className={isListening ? "animate-pulse" : ""} /></button>
+              {isLoadingResults && (
+                <div className="absolute right-14 top-1/2 -translate-y-1/2">
+                  <div className="w-5 h-5 rounded-full border-2 border-[#0d7377] border-t-transparent animate-spin" />
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <button onClick={() => setFilterDrawerOpen(true)} className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 rounded-2xl font-semibold text-slate-600 hover:border-[#ff6b6b] hover:text-[#ff6b6b] transition-all"><SlidersHorizontal size={18} /> Filters</button>
@@ -200,8 +283,13 @@ export default function DashboardPage() {
               <>
                 <div className="flex justify-between items-end mb-8">
                   <div>
-                    <h2 className={`text-3xl font-bold text-[#0d7377] ${dmSans.className}`}>{activeTab === "favorites" ? "Your Favorites" : "Find, Compare, Decide"}</h2>
-                    <p className="text-slate-500 font-medium mt-1">Showing verified data for San Francisco area</p>
+                    <h2 className={`text-3xl font-bold text-[#0d7377] ${dmSans.className}`}>
+                      {activeTab === "favorites" ? "Your Favorites" : "Find, Compare, Decide"}
+                    </h2>
+                    <p className="text-slate-500 font-medium mt-1">Showing verified data based on your filters</p>
+                  </div>
+                  <div className="bg-[#ff6b6b]/10 text-[#ff6b6b] px-4 py-2 rounded-xl text-sm font-black tracking-wide">
+                    {filteredItems.length} RESULTS
                   </div>
                   <div className="bg-[#ff6b6b]/10 text-[#ff6b6b] px-4 py-2 rounded-xl text-sm font-black tracking-wide">{filteredItems.length} RESULTS</div>
                 </div>
@@ -212,15 +300,41 @@ export default function DashboardPage() {
                     ))}
                   </AnimatePresence>
                 </div>
+                
+                {filteredItems.length === 0 ? (
+                   <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+                      <div className="bg-slate-100 p-6 rounded-full mb-4"><Search size={40} /></div>
+                      <p className="font-bold">No results found matching these filters.</p>
+                      <button onClick={() => { setMinRating(0); setMaxPrice(500); setMaxDistance(10); setOnlyOpen(false); setSearchQuery(""); }} className="mt-4 text-[#0d7377] font-bold underline">Clear Filters</button>
+                   </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <AnimatePresence mode="popLayout">
+                      {filteredItems.map((item) => (
+                        <ItemCard 
+                          key={item.id} 
+                          item={item} 
+                          isFavorite={favorites.includes(item.id)} 
+                          hasComments={!!userReviews[item.id]?.length}
+                          onFavoriteToggle={() => toggleFavorite(item.id)} 
+                          onDetailsClick={() => handleCompareDetails(item)} 
+                          onCommentClick={() => openCommentModal(item)}
+                        />
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                )}
               </>
             )}
+
+            {/* 2. Compare View */}
             {activeTab === 'compare' && <CompareSection data={API_DATA} />}
             {activeTab === 'ai-bot' && <AIBotInterface />}
           </div>
         </main>
       </div>
 
-      {/* FILTER DRAWER */}
+      {/* FIXED FILTER DRAWER (REMOVED BACKDROP BLUR/OVERLAY FOR DASHBOARD VISIBILITY) */}
       <AnimatePresence>
         {filterDrawerOpen && (
           <>
@@ -360,6 +474,9 @@ function NavItem({ icon, label, active = false, sidebarOpen, onClick }: any) {
 }
 
 function ItemCard({ item, isFavorite, onFavoriteToggle, onDetailsClick, onCommentClick, hasComments }: any) {
+  const [imgError, setImgError] = useState(false);
+  const imgSrc = item.img || item.thumbnail || "";
+  const showFallback = imgError || !imgSrc;
   return (
     <motion.div layout className="bg-white rounded-[32px] border border-slate-100 p-4 shadow-sm hover:shadow-xl transition-all flex flex-col group relative">
       <div className="relative h-44 rounded-[24px] overflow-hidden mb-4">
