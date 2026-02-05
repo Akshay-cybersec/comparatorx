@@ -11,6 +11,7 @@ from app.services.web_search import search_web
 from app.services.youtube_search import search_youtube
 from app.services.youtube_transcripts import fetch_transcripts_for_videos
 from app.services.mongo import get_reviews
+from app.services.serpapi_shopping import search_shopping_products
 
 
 router = APIRouter()
@@ -228,16 +229,13 @@ def unified_query(
         data["location_hint"] = query_location
         return data
 
-    payload = CrawlerAgenRequest(
-        name=None,
-        category="product",
-        query=q,
-        lat=lat,
-        lng=lng,
-        place_id=None,
-        include_transcripts=False,
-        max_transcripts=0
-    )
-    data = crawleragen(payload)
-    data["mode"] = mode
-    return data
+    products = search_shopping_products(q, num=10)
+    return {
+        "mode": mode,
+        "query": q,
+        "results": products.get("items", []),
+        "meta": {
+            "notes": [products.get("error")] if products.get("error") else [],
+            "details": [products.get("details")] if products.get("details") else []
+        }
+    }
