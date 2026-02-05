@@ -2,6 +2,7 @@ import re
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse
 
+from difflib import get_close_matches
 from transformers import pipeline
 
 ALLOWED_INTENTS = {
@@ -41,8 +42,22 @@ COLORS = {
     "teal",
 }
 
+COLOR_SYNONYMS = {
+    "cyan": "blue",
+    "navy": "blue",
+    "teal": "blue",
+    "maroon": "red",
+    "grey": "gray",
+}
 
-PRODUCT_KEYWORDS = {
+COLOR_HARMONY = {
+    "cyan": ["navy blue", "black", "charcoal grey", "white"],
+    "blue": ["black", "white", "gray", "tan"],
+    "red": ["black", "white", "navy blue", "gray"],
+    "green": ["white", "black", "beige", "navy blue"],
+}
+
+PRODUCT_KEYWORDS = [
     # apparel
     "jeans",
     "t-shirt",
@@ -83,8 +98,16 @@ PRODUCT_KEYWORDS = {
     "bottle",
     "perfume",
     "book",
-}
+]
 
+PRODUCT_KEYWORDS_SET = set(PRODUCT_KEYWORDS)
+
+PRODUCT_SYNONYMS = {
+    "jeans": "denim",
+    "t-shirt": "tee",
+    "sunglasses": "shades",
+    "phone": "mobile",
+}
 
 BRANDS = {
     "nike",
@@ -110,8 +133,11 @@ GENDERS = {
     "womens": "women",
     "female": "women",
     "kids": "kids",
+    "kid": "kids",
     "boys": "kids",
+    "boy": "kids",
     "girls": "kids",
+    "girl": "kids",
 }
 
 
@@ -149,12 +175,42 @@ BLOCKED_DOMAIN_KEYWORDS = {
 
 
 SIZE_PATTERN = re.compile(r"\b(\d{2,3}|xs|s|m|l|xl|xxl|xxxl)\b", re.IGNORECASE)
+AGE_PATTERN = re.compile(r"\b(\d{1,2}\s*-\s*\d{1,2}|\d{1,2})\s*(?:years|yrs|yr|year)\s*old?\b", re.IGNORECASE)
 _ZERO_SHOT = None
+KEYWORD_INTENTS = {
+    "product_search": [
+        "buy",
+        "find",
+        "looking for",
+        "want",
+        "purchase",
+        "order",
+    ],
+    "price_compare": [
+        "compare",
+        "cheapest",
+        "price difference",
+        "lowest price",
+        "best price",
+    ],
+    "product_recommendation": [
+        "best for",
+        "matching",
+        "goes with",
+        "match with",
+        "pair with",
+    ],
+}
 
 
 def extract_intent_entities(message: str) -> Dict[str, Any]:
     text = (message or "").lower()
-    intent, confidence = _detect_intent_with_confidence(text)
+    intent, ai_confidence = _detect_intent_with_confidence(text)
+    keyword_intent, keyword_confidence = _keyword_intent_confidence(text)
+    if keyword_intent:
+        if keyword_confidence > ai_confidence:
+            intent = keyword_intent
+    confidence = (0.7 * ai_confidence) + (0.3 * keyword_confidence)
 
     entities = {
         "product": _extract_product(text),
@@ -188,24 +244,36 @@ def _detect_intent_with_confidence(text: str) -> Tuple[str, float]:
 
 
 def _extract_product(text: str) -> Optional[str]:
-    for product in PRODUCT_KEYWORDS:
+    for product in sorted(PRODUCT_KEYWORDS, key=len, reverse=True):
         if product in text:
             return product
     phrase = _extract_product_phrase(text)
-    return phrase
+    if phrase:
+        return phrase
+    return _fuzzy_match(text, PRODUCT_KEYWORDS_SET)
 
 
 def _extract_size(text: str) -> Optional[str]:
+    age_match = AGE_PATTERN.search(text)
+    if age_match:
+        age = re.sub(r"\s+", "", age_match.group(1))
+        return f"age {age} years"
     match = SIZE_PATTERN.search(text)
     if match:
-        return match.group(1).upper()
+        value = match.group(1).upper()
+        if value.isdigit():
+            return f"waist {value}"
+        return value
     return None
 
 
 def _extract_color(text: str) -> Optional[str]:
     for color in COLORS:
         if re.search(rf"\b{re.escape(color)}\b", text):
-            return color
+            return COLOR_SYNONYMS.get(color, color)
+    fuzzy = _fuzzy_match(text, COLORS)
+    if fuzzy:
+        return COLOR_SYNONYMS.get(fuzzy, fuzzy)
     return None
 
 
@@ -213,6 +281,7 @@ def _extract_brand(text: str) -> Optional[str]:
     for brand in BRANDS:
         if re.search(rf"\b{re.escape(brand)}\b", text):
             return brand
+    return _fuzzy_match(text, BRANDS)
     return None
 
 
@@ -231,13 +300,13 @@ def _extract_match_with(text: str) -> Optional[Dict[str, Optional[str]]]:
     phrase = match.group(1).strip()
     product = None
     color = None
-    for prod in PRODUCT_KEYWORDS:
+    for prod in sorted(PRODUCT_KEYWORDS, key=len, reverse=True):
         if prod in phrase:
             product = prod
             break
     for col in COLORS:
         if re.search(rf"\b{re.escape(col)}\b", phrase):
-            color = col
+            color = COLOR_SYNONYMS.get(col, col)
             break
     return {"product": product, "color": color}
 
@@ -297,6 +366,19 @@ def normalize_extraction(raw: Dict[str, Any]) -> Tuple[str, float, Dict[str, Any
     return intent, confidence, normalized
 
 
+def _keyword_intent_confidence(text: str) -> Tuple[Optional[str], float]:
+    best_intent = None
+    best_score = 0.0
+    for intent, keywords in KEYWORD_INTENTS.items():
+        hits = sum(1 for kw in keywords if kw in text)
+        if hits:
+            score = min(1.0, hits / max(1, len(keywords)))
+            if score > best_score:
+                best_score = score
+                best_intent = intent
+    return best_intent, best_score
+
+
 def _normalize_str(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -345,6 +427,33 @@ def build_query(intent: str, entities: Dict[str, Any], fallback: str) -> str:
     return query or fallback
 
 
+def build_query_variants(intent: str, entities: Dict[str, Any], fallback: str) -> list:
+    base = build_query(intent, entities, fallback=fallback)
+    variants = [base]
+
+    expanded_parts = []
+    product = entities.get("product")
+    if product in PRODUCT_SYNONYMS:
+        expanded_parts.append(PRODUCT_SYNONYMS[product])
+    color = entities.get("color")
+    if intent == "product_recommendation" and color:
+        harmonies = COLOR_HARMONY.get(color, [])
+        if harmonies:
+            expanded_parts.append("colors " + " ".join(harmonies[:2]))
+    if expanded_parts:
+        variants.append(base + " " + " ".join(expanded_parts))
+
+    fallback_query = " ".join([p for p in [entities.get("brand"), entities.get("product")] if p]).strip()
+    if fallback_query:
+        variants.append(fallback_query)
+
+    deduped = []
+    for q in variants:
+        if q and q not in deduped:
+            deduped.append(q)
+    return deduped
+
+
 def filter_and_rank_results(items: list, entities: Dict[str, Any]) -> list:
     filtered = []
     for item in items:
@@ -359,26 +468,16 @@ def filter_and_rank_results(items: list, entities: Dict[str, Any]) -> list:
             "image": None,
             "_domain": domain,
         })
-    if not filtered:
-        # Fallback: return non-blocked items even if domains are not ecommerce.
-        for item in items:
-            link = item.get("link") or ""
-            domain = _extract_domain(link)
-            if _is_blocked_domain(domain):
-                continue
-            filtered.append({
-                "title": item.get("title"),
-                "link": link,
-                "snippet": item.get("snippet"),
-                "image": None,
-                "_domain": domain,
-            })
 
     def score(entry: Dict[str, Any]) -> int:
         base = 0
         if entry.get("_domain") in ECOMMERCE_DOMAINS:
             base += 6
         text = f"{entry.get('title') or ''} {entry.get('snippet') or ''}".lower()
+        intent_boost = 0
+        if "price" in text:
+            intent_boost += 1
+        base += intent_boost
         for key in ["product", "brand", "color", "size", "gender"]:
             value = entities.get(key)
             if value and str(value).lower() in text:
@@ -409,3 +508,12 @@ def _is_blocked_domain(domain: str) -> bool:
     if not domain:
         return False
     return any(keyword in domain for keyword in BLOCKED_DOMAIN_KEYWORDS)
+
+
+def _fuzzy_match(text: str, options: set) -> Optional[str]:
+    tokens = re.findall(r"[a-z0-9']+", text.lower())
+    for token in tokens:
+        match = get_close_matches(token, options, n=1, cutoff=0.88)
+        if match:
+            return match[0]
+    return None
