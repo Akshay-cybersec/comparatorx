@@ -83,12 +83,14 @@ def normalize_places(raw_data):
             photos = details.get("photos", [])
         photo_ref = photos[0].get("photo_reference") if photos else None
 
+        address = d.get("vicinity") or d.get("formatted_address")
+
         normalized.append({
             "place_id": place_id,
             "name": name,
             "rating": d.get("rating", 0),
             "user_ratings_total": d.get("user_ratings_total", 0),
-            "address": d.get("vicinity"),
+            "address": address,
             "location": d["geometry"]["location"],
             "open_now": opening_hours.get("open_now", False),
             "today_timing": get_today_timing(opening_hours),

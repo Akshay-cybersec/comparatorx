@@ -2,12 +2,13 @@
 
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useParams, useRouter } from "next/navigation";
 import { 
   ArrowLeft, Download, Share2, Star, MapPin, 
   Dumbbell, Waves, ExternalLink, ChevronUp,
   MessageSquare, AlertTriangle,
-  Car, Lightbulb, Users, Loader2
+  Car, Lightbulb, Users, Loader2, TrendingUp
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
 import { apiPost } from "@/lib/api";
@@ -71,8 +72,13 @@ export default function CompareDetailsPage() {
   }
 
   // Dynamic values based on either API or LocalStorage
-  const displayRating = apiData?.rating || item.rating;
+  const displayRating = apiData?.google_place?.rating || apiData?.rating || item.rating;
   const displayScore = apiData?.score || item.score || 85;
+  const priceHistory = apiData?.price_history || [];
+  const googlePlace = apiData?.google_place || {};
+  const youtubeVideos = apiData?.youtube_videos || [];
+  const userReviews = apiData?.user_reviews || [];
+  const mapsUrl = googlePlace?.url || item?.google_maps_url;
 
   return (
     <div className={`min-h-screen bg-[#F4F7F7] text-[#2B2D42] ${inter.className}`}>
@@ -97,7 +103,6 @@ export default function CompareDetailsPage() {
           <div className="hidden md:flex items-center gap-3">
              <button
                onClick={() => {
-                 const mapsUrl = apiData?.google_place?.url || item?.google_maps_url;
                  if (mapsUrl) window.open(mapsUrl, "_blank", "noopener,noreferrer");
                }}
                className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all font-bold text-sm"
@@ -181,6 +186,30 @@ export default function CompareDetailsPage() {
         {/* DETAILS GRID */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
           <div className="xl:col-span-2 space-y-8">
+            {priceHistory.length > 0 && (
+              <div className="bg-white rounded-[48px] p-10 border border-slate-100 shadow-sm">
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="p-3 bg-[#0D7377]/10 rounded-2xl text-[#0D7377]"><TrendingUp size={24} /></div>
+                  <h3 className="text-2xl font-bold">Price History</h3>
+                </div>
+                <PriceChart data={priceHistory} />
+              </div>
+            )}
+
+            {(googlePlace?.website || mapsUrl) && (
+              <div className="bg-white rounded-[48px] p-10 border border-slate-100 shadow-sm">
+                <h3 className="text-2xl font-bold mb-6">Links</h3>
+                <div className="flex flex-wrap gap-3">
+                  {mapsUrl && (
+                    <a className="px-4 py-2 rounded-xl bg-[#0D7377] text-white text-sm font-bold" href={mapsUrl} target="_blank" rel="noreferrer">Open in Maps</a>
+                  )}
+                  {googlePlace?.website && (
+                    <a className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold" href={googlePlace.website} target="_blank" rel="noreferrer">Website</a>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-[48px] p-10 border border-slate-100 shadow-sm">
               <div className="flex items-center gap-4 mb-8">
                 <div className="p-3 bg-[#0D7377]/10 rounded-2xl text-[#0D7377]"><MessageSquare size={24} /></div>
@@ -213,6 +242,34 @@ export default function CompareDetailsPage() {
           </div>
 
           <div className="space-y-8">
+            {youtubeVideos.length > 0 && (
+              <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm">
+                <h4 className="text-lg font-bold mb-6">YouTube</h4>
+                <div className="space-y-4">
+                  {youtubeVideos.map((v: any) => (
+                    <a key={v.video_id} href={v.link} target="_blank" rel="noreferrer" className="block p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 transition-all">
+                      <div className="text-sm font-bold text-slate-800 line-clamp-2">{v.title}</div>
+                      <div className="text-xs text-slate-500 mt-1">{v.channel}</div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {userReviews.length > 0 && (
+              <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm">
+                <h4 className="text-lg font-bold mb-6">User Reviews</h4>
+                <div className="space-y-4">
+                  {userReviews.slice(0, 5).map((r: any, idx: number) => (
+                    <div key={idx} className="p-3 rounded-2xl bg-slate-50">
+                      <div className="text-xs text-slate-400 mb-1">{r.user_name || "Anonymous"}</div>
+                      <div className="text-sm text-slate-700">{r.review}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm">
               <h4 className="text-lg font-bold mb-8">Performance Indices</h4>
               <div className="space-y-8">
@@ -296,6 +353,28 @@ function MetricBar({ label, value, color }: { label: string; value: number; colo
       </div>
       <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
         <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(value, 100)}%` }} transition={{ duration: 1 }} className="h-full rounded-full" style={{ backgroundColor: color }} />
+      </div>
+    </div>
+  );
+}
+
+function PriceChart({ data }: { data: Array<{ date: string; price: number }> }) {
+  if (!data || data.length === 0) {
+    return <div className="text-sm text-slate-500">No price history available.</div>;
+  }
+  const chartData = data.map(d => ({ date: d.date.slice(5), price: d.price }));
+
+  return (
+    <div className="space-y-4">
+      <div className="w-full h-56">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} />
+            <Tooltip />
+            <Line type="monotone" dataKey="price" stroke="#0D7377" strokeWidth={3} dot={{ r: 3 }} />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

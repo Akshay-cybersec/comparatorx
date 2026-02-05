@@ -86,6 +86,20 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [placeholders.length]);
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("dashboard_state");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.results) setResults(parsed.results);
+        if (parsed?.searchQuery) setSearchQuery(parsed.searchQuery);
+        if (parsed?.mode) setMode(parsed.mode);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const getCoords = () =>
     new Promise<{ lat: number; lng: number } | null>((resolve) => {
       if (!navigator.geolocation) return resolve(null);
@@ -109,8 +123,8 @@ export default function DashboardPage() {
       });
       const data = await apiGet<any>(`/api/query?${queryString}`);
       setMode(data.mode || null);
-        if (data.mode === "product") {
-          const mapped = (data.results || []).map((item: any, idx: number) => ({
+      if (data.mode === "product") {
+        const mapped = (data.results || []).map((item: any, idx: number) => ({
             id: item.url || `product:${idx}`,
             name: item.name || query,
             category: "product",
@@ -126,15 +140,25 @@ export default function DashboardPage() {
             img: item.thumbnail || "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&q=80&w=800",
             reason: item.source ? `Sourced from ${item.source}` : "Shopping result"
           }));
-          setResults(mapped);
-        } else {
+        setResults(mapped);
+        try {
+          localStorage.setItem("dashboard_state", JSON.stringify({ results: mapped, searchQuery: query, mode: data.mode }));
+        } catch {}
+      } else {
         const mapped = (data.results || []).map((item: any) => ({
-          ...item,
-          id: item.place_id || item.id,
-          price: item.price ?? 0,
-          img: item.img || item.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || "X")}&background=0d7377&color=ffffff`
+            ...item,
+            id: item.place_id || item.id,
+            price: item.price ?? 0,
+            img: item.img || item.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || "X")}&background=0d7377&color=ffffff`
         }));
         setResults(mapped);
+        const hasKnownCategory = mapped.some((m: any) => m.category === "doctor" || m.category === "gym");
+        if (!hasKnownCategory) {
+          setSelectedType("all");
+        }
+        try {
+          localStorage.setItem("dashboard_state", JSON.stringify({ results: mapped, searchQuery: query, mode: data.mode }));
+        } catch {}
       }
     } catch (err) {
       console.error(err);
@@ -229,15 +253,21 @@ export default function DashboardPage() {
       const rating = item.rating ?? 0;
       const open = item.open_now ?? false;
       const matchesQuery = mode ? true : (name.includes(query) || address.includes(query));
+      const typeMatch = mode ? true : (selectedType === "all" || item.category === selectedType);
+      if (mode) {
+        return matchesQuery && typeMatch;
+      }
       return matchesQuery &&
-             (selectedType === "all" || item.category === selectedType) &&
+             typeMatch &&
              rating >= minRating &&
              (!onlyOpen || open) &&
              price <= maxPrice &&
              distance <= maxDistance &&
              (street === "" || address.includes(street));
     }).sort((a, b) => b.score - a.score);
-  }, [searchQuery, selectedType, minRating, onlyOpen, maxPrice, maxDistance, streetQuery, activeTab, favorites, mode]);
+  }, [searchQuery, selectedType, minRating, onlyOpen, maxPrice, maxDistance, streetQuery, activeTab, favorites, mode, results]);
+
+  const visibleItems = mode ? (filteredItems.length ? filteredItems : results) : filteredItems;
 
   return (
     <div className={`h-screen w-full bg-[#f8fcfc] text-[#2B2D42] ${inter.className} flex overflow-hidden`}>
@@ -308,11 +338,11 @@ export default function DashboardPage() {
                     <h2 className={`text-3xl font-bold text-[#0d7377] ${dmSans.className}`}>{activeTab === "favorites" ? "Your Favorites" : "Find, Compare, Decide"}</h2>
                     <p className="text-slate-500 font-medium mt-1">Showing verified data for San Francisco area</p>
                   </div>
-                  <div className="bg-[#ff6b6b]/10 text-[#ff6b6b] px-4 py-2 rounded-xl text-sm font-black tracking-wide">{filteredItems.length} RESULTS</div>
+                  <div className="bg-[#ff6b6b]/10 text-[#ff6b6b] px-4 py-2 rounded-xl text-sm font-black tracking-wide">{visibleItems.length} RESULTS</div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   <AnimatePresence mode="popLayout">
-                    {filteredItems.map((item) => (
+                    {visibleItems.map((item) => (
                       <ItemCard 
                         key={item.id} 
                         item={item} 
@@ -492,11 +522,9 @@ function CompareSection({ data }: { data: any[] }) {
                 </div>
                 <div className="divide-y divide-slate-50">
                     <CompareRow label="System Score" icon={<TrendingUp size={16}/>} data={comparisonData.map(d => d.score ? `${d.score.toFixed(1)} / 110` : "N/A")} highlight={true} />
-                    <CompareRow label="Patient Trust" icon={<Star size={16}/>} data={comparisonData.map(d => `${d.user_ratings_total} verified reviews`)} />
-                    <CompareRow label="Proximity" icon={<Navigation size={16}/>} data={comparisonData.map(d => `${d.distance} KM away`)} />
-                    <CompareRow label="Video Insights" icon={<Youtube size={16}/>} data={comparisonData.map(d => d.youtube_summary)} />
-                    <CompareRow label="Recent Feedback" icon={<MessageSquare size={16}/>} data={comparisonData.map(d => d.top_review)} />
-                    <CompareRow label="Website" icon={<Globe size={16}/>} data={comparisonData.map(d => d.website)} />
+                    <CompareRow label="Reviews" icon={<Star size={16}/>} data={comparisonData.map(d => `${d.user_ratings_total || d.reviews || 0} reviews`)} />
+                    <CompareRow label="Distance" icon={<Navigation size={16}/>} data={comparisonData.map(d => d.distance !== undefined ? `${d.distance} KM away` : "N/A")} />
+                    <CompareRow label="Source" icon={<Globe size={16}/>} data={comparisonData.map(d => d.address || d.source || "N/A")} />
                 </div>
             </div>
 

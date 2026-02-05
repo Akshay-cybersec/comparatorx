@@ -9,6 +9,7 @@ load_dotenv()
 API_KEY = os.getenv("GOOGLE_API_KEY")
 
 NEARBY_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+TEXTSEARCH_URL = "https://maps.googleapis.com/maps/api/place/textsearch/json"
 DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
 GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 PHOTO_URL = "https://maps.googleapis.com/maps/api/place/photo"
@@ -64,6 +65,27 @@ def search_places(lat: float, lng: float, radius=3000, place_type: Optional[str]
     set_cache(cache_key, results)
     print("🌍 Fetched places from Google API")
 
+    return results
+
+
+def search_places_text(query: str, radius: Optional[int] = None, lat: Optional[float] = None, lng: Optional[float] = None):
+    cache_key = f"text:{query}:{radius or 'any'}:{lat or 'any'}:{lng or 'any'}"
+    cached = get_cache(cache_key)
+    if cached:
+        print("⚡ Returning textsearch from cache")
+        return cached
+
+    params = {"query": query, "key": API_KEY}
+    if lat is not None and lng is not None:
+        params["location"] = f"{lat},{lng}"
+    if radius:
+        params["radius"] = radius
+
+    res = requests.get(TEXTSEARCH_URL, params=params, timeout=10)
+    data = res.json()
+    results = data.get("results", [])
+    set_cache(cache_key, results)
+    print("🌍 Fetched textsearch from Google API")
     return results
 
 
