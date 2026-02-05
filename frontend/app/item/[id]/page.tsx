@@ -2,14 +2,16 @@
 
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { useParams, useRouter } from "next/navigation";
 import { 
   ArrowLeft, Download, Share2, Star, MapPin, 
   Dumbbell, Waves, ExternalLink, ChevronUp,
   MessageSquare, AlertTriangle,
-  Car, Lightbulb, Users, Loader2
+  Car, Lightbulb, Users, Loader2, TrendingUp
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
+import { apiPost } from "@/lib/api";
 
 const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '700'] });
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600'] });
@@ -20,6 +22,7 @@ export default function CompareDetailsPage() {
   const [item, setItem] = useState<any>(null);
   const [apiData, setApiData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [imgError, setImgError] = useState(false);
 
   useEffect(() => {
     const initializePage = async () => {
@@ -34,13 +37,21 @@ export default function CompareDetailsPage() {
 
       // 2. Call your POST API with the stored data
       try {
-        const response = await fetch(`http://localhost:8000/api/nearby?q=doctors%20near%20me&lat=37.7749&lng=-122.4194`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(parsedItem)
+        const isProduct = (parsedItem.category || "").toLowerCase() === "product";
+        const entityId = isProduct
+          ? (parsedItem.product_url || parsedItem.url || parsedItem.id)
+          : (parsedItem.place_id || parsedItem.id);
+        const data = await apiPost<any>("/api/crawleragen", {
+          name: parsedItem.name,
+          category: parsedItem.category,
+          place_id: isProduct ? null : (parsedItem.place_id || parsedItem.id),
+          entity_id: entityId,
+          include_transcripts: true,
+          max_transcripts: 2,
+          price: parsedItem.price,
+          extra: isProduct ? { product_url: parsedItem.product_url || parsedItem.url } : undefined
         });
-        const data = await response.json();
-        setApiData(data);
+        setApiData(data.results || data);
       } catch (error) {
         console.error("API Error:", error);
       } finally {
@@ -61,8 +72,13 @@ export default function CompareDetailsPage() {
   }
 
   // Dynamic values based on either API or LocalStorage
-  const displayRating = apiData?.rating || item.rating;
+  const displayRating = apiData?.google_place?.rating || apiData?.rating || item.rating;
   const displayScore = apiData?.score || item.score || 85;
+  const priceHistory = apiData?.price_history || [];
+  const googlePlace = apiData?.google_place || {};
+  const youtubeVideos = apiData?.youtube_videos || [];
+  const userReviews = apiData?.user_reviews || [];
+  const mapsUrl = googlePlace?.url || item?.google_maps_url;
 
   return (
     <div className={`min-h-screen bg-[#F4F7F7] text-[#2B2D42] ${inter.className}`}>
@@ -77,7 +93,7 @@ export default function CompareDetailsPage() {
               <span className="text-sm font-bold">Back</span>
             </button>
             <div>
-              <h1 className={`text-xl font-bold text-[#0D7377] ${dmSans.className}`}>Property Intelligence Report</h1>
+              <h1 className={`text-xl font-bold text-[#0D7377] ${dmSans.className}`}>Report</h1>
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Analysis for ID: {item.id}</p>
@@ -85,12 +101,14 @@ export default function CompareDetailsPage() {
             </div>
           </div>
           <div className="hidden md:flex items-center gap-3">
-             <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all font-bold text-sm">
-                <Share2 size={16} /> Share
+             <button
+               onClick={() => {
+                 if (mapsUrl) window.open(mapsUrl, "_blank", "noopener,noreferrer");
+               }}
+               className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-all font-bold text-sm"
+             >
+                <Share2 size={16} /> Open in Maps
              </button>
-             <button className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-[#0D7377] text-white text-sm font-bold shadow-lg shadow-[#0D7377]/20 hover:scale-[1.02] transition-all">
-              <Download size={16} /> Export PDF
-            </button>
           </div>
         </div>
       </header>
@@ -100,7 +118,19 @@ export default function CompareDetailsPage() {
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
           <div className="lg:col-span-7 relative group min-h-[500px]">
             <div className="absolute inset-0 rounded-[48px] overflow-hidden">
-              <img src={item.img || item.image} className="w-full h-full object-cover" alt={item.name} />
+              {!imgError ? (
+                <img
+                  src={item.img || item.image}
+                  loading="lazy"
+                  onError={() => setImgError(true)}
+                  className="w-full h-full object-cover"
+                  alt={item.name}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0d7377]/10 to-[#ff6b6b]/10 text-[#0d7377] font-black text-4xl">
+                  {(item.name || "?").slice(0, 1).toUpperCase()}
+                </div>
+              )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
             </div>
             <div className="absolute bottom-10 left-10 right-10 flex justify-between items-end">
@@ -156,6 +186,30 @@ export default function CompareDetailsPage() {
         {/* DETAILS GRID */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
           <div className="xl:col-span-2 space-y-8">
+            {priceHistory.length > 0 && (
+              <div className="bg-white rounded-[48px] p-10 border border-slate-100 shadow-sm">
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="p-3 bg-[#0D7377]/10 rounded-2xl text-[#0D7377]"><TrendingUp size={24} /></div>
+                  <h3 className="text-2xl font-bold">Price History</h3>
+                </div>
+                <PriceChart data={priceHistory} />
+              </div>
+            )}
+
+            {(googlePlace?.website || mapsUrl) && (
+              <div className="bg-white rounded-[48px] p-10 border border-slate-100 shadow-sm">
+                <h3 className="text-2xl font-bold mb-6">Links</h3>
+                <div className="flex flex-wrap gap-3">
+                  {mapsUrl && (
+                    <a className="px-4 py-2 rounded-xl bg-[#0D7377] text-white text-sm font-bold" href={mapsUrl} target="_blank" rel="noreferrer">Open in Maps</a>
+                  )}
+                  {googlePlace?.website && (
+                    <a className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold" href={googlePlace.website} target="_blank" rel="noreferrer">Website</a>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-[48px] p-10 border border-slate-100 shadow-sm">
               <div className="flex items-center gap-4 mb-8">
                 <div className="p-3 bg-[#0D7377]/10 rounded-2xl text-[#0D7377]"><MessageSquare size={24} /></div>
@@ -181,13 +235,41 @@ export default function CompareDetailsPage() {
                 <h3 className="text-2xl font-bold text-red-900">Critical Metrics</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <CautionCard feature="Price Point" issue={`Estimated cost of $${item.price} per visit.`} />
+                <CautionCard feature="Price Point" issue={`Estimated cost of ₹${item.price} per visit.`} />
                 <CautionCard feature="Status" issue={item.open_now ? "Currently Open - High Demand" : "Currently Closed"} />
               </div>
             </div>
           </div>
 
           <div className="space-y-8">
+            {youtubeVideos.length > 0 && (
+              <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm">
+                <h4 className="text-lg font-bold mb-6">YouTube</h4>
+                <div className="space-y-4">
+                  {youtubeVideos.map((v: any) => (
+                    <a key={v.video_id} href={v.link} target="_blank" rel="noreferrer" className="block p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 transition-all">
+                      <div className="text-sm font-bold text-slate-800 line-clamp-2">{v.title}</div>
+                      <div className="text-xs text-slate-500 mt-1">{v.channel}</div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {userReviews.length > 0 && (
+              <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm">
+                <h4 className="text-lg font-bold mb-6">User Reviews</h4>
+                <div className="space-y-4">
+                  {userReviews.slice(0, 5).map((r: any, idx: number) => (
+                    <div key={idx} className="p-3 rounded-2xl bg-slate-50">
+                      <div className="text-xs text-slate-400 mb-1">{r.user_name || "Anonymous"}</div>
+                      <div className="text-sm text-slate-700">{r.review}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="bg-white rounded-[40px] p-8 border border-slate-100 shadow-sm">
               <h4 className="text-lg font-bold mb-8">Performance Indices</h4>
               <div className="space-y-8">
@@ -205,7 +287,7 @@ export default function CompareDetailsPage() {
               <div className="space-y-3">
                 <SpecRow label="Category" value={item.category} />
                 <SpecRow label="Distance" value={`${item.distance} KM`} />
-                <SpecRow label="Pricing" value={`$${item.price}`} />
+                <SpecRow label="Pricing" value={`₹${item.price}`} />
                 <SpecRow label="Review Count" value={item.user_ratings_total} />
               </div>
             </div>
@@ -271,6 +353,28 @@ function MetricBar({ label, value, color }: { label: string; value: number; colo
       </div>
       <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
         <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(value, 100)}%` }} transition={{ duration: 1 }} className="h-full rounded-full" style={{ backgroundColor: color }} />
+      </div>
+    </div>
+  );
+}
+
+function PriceChart({ data }: { data: Array<{ date: string; price: number }> }) {
+  if (!data || data.length === 0) {
+    return <div className="text-sm text-slate-500">No price history available.</div>;
+  }
+  const chartData = data.map(d => ({ date: d.date.slice(5), price: d.price }));
+
+  return (
+    <div className="space-y-4">
+      <div className="w-full h-56">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+            <YAxis tick={{ fontSize: 11 }} />
+            <Tooltip />
+            <Line type="monotone" dataKey="price" stroke="#0D7377" strokeWidth={3} dot={{ r: 3 }} />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

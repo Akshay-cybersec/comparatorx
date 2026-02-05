@@ -7,10 +7,11 @@ import {
   LayoutDashboard, Search, ChevronLeft, ChevronRight, SlidersHorizontal, 
   MapPin, Star, X, Heart, History, Navigation, ArrowLeft, Mic, 
   GitCompare, Youtube, MessageSquare, CheckCircle2, TrendingUp, Globe, Activity, ArrowRight,
-  MessageCircle, User, Clock // Send removed as requested
+  MessageCircle, User, Clock, Sparkles, Trophy, Quote
 } from "lucide-react";
 import { DM_Sans, Inter } from 'next/font/google';
 import toast from 'react-hot-toast'; // Import toast
+import { apiGet, apiPost, buildQuery } from "@/lib/api";
 
 const dmSans = DM_Sans({ subsets: ['latin'], weight: ['400', '500', '700'] });
 const inter = Inter({ subsets: ['latin'], weight: ['400', '500', '600'] });
@@ -66,6 +67,9 @@ export default function DashboardPage() {
   const [selectedType, setSelectedType] = useState("all");
   const [activeTab, setActiveTab] = useState("dashboard");
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [results, setResults] = useState<any[]>(API_DATA);
+  const [isLoadingResults, setIsLoadingResults] = useState(false);
+  const [mode, setMode] = useState<string | null>(null);
   
   // --- Comment System State ---
   const [userReviews, setUserReviews] = useState<Record<string, Array<{ text: string, rating: number, date: string }>>>({});
@@ -82,6 +86,88 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [placeholders.length]);
 
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("dashboard_state");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.results) setResults(parsed.results);
+        if (parsed?.searchQuery) setSearchQuery(parsed.searchQuery);
+        if (parsed?.mode) setMode(parsed.mode);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const getCoords = () =>
+    new Promise<{ lat: number; lng: number } | null>((resolve) => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    });
+
+  const fetchResults = useCallback(async () => {
+    const query = searchQuery.trim();
+    if (!query) return;
+    setIsLoadingResults(true);
+    try {
+      const coords = await getCoords();
+      const queryString = buildQuery({
+        q: query,
+        lat: coords?.lat,
+        lng: coords?.lng
+      });
+      const data = await apiGet<any>(`/api/query?${queryString}`);
+      setMode(data.mode || null);
+      if (data.mode === "product") {
+        const mapped = (data.results || []).map((item: any, idx: number) => ({
+            id: item.url || `product:${idx}`,
+            name: item.name || query,
+            category: "product",
+            rating: item.rating ?? 0,
+            user_ratings_total: item.reviews ?? 0,
+            address: item.source || "Google Shopping",
+            distance: 0,
+            score: item.rating ? item.rating * 20 : 50,
+            open_now: false,
+            price: item.price ?? 0,
+            extra: item,
+            product_url: item.url,
+            img: item.thumbnail || "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&q=80&w=800",
+            reason: item.source ? `Sourced from ${item.source}` : "Shopping result"
+          }));
+        setResults(mapped);
+        try {
+          localStorage.setItem("dashboard_state", JSON.stringify({ results: mapped, searchQuery: query, mode: data.mode }));
+        } catch {}
+      } else {
+        const mapped = (data.results || []).map((item: any) => ({
+            ...item,
+            id: item.place_id || item.id,
+            price: item.price ?? 0,
+            img: item.img || item.image || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.name || "X")}&background=0d7377&color=ffffff`
+        }));
+        setResults(mapped);
+        const hasKnownCategory = mapped.some((m: any) => m.category === "doctor" || m.category === "gym");
+        if (!hasKnownCategory) {
+          setSelectedType("all");
+        }
+        try {
+          localStorage.setItem("dashboard_state", JSON.stringify({ results: mapped, searchQuery: query, mode: data.mode }));
+        } catch {}
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to fetch results");
+    } finally {
+      setIsLoadingResults(false);
+    }
+  }, [searchQuery]);
+
   const startListening = useCallback(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) { toast.error("Browser not supported"); return; }
@@ -89,9 +175,12 @@ export default function DashboardPage() {
     recognition.lang = 'en-US'; 
     recognition.onstart = () => setIsListening(true);
     recognition.onend = () => setIsListening(false);
-    recognition.onresult = (e: any) => setSearchQuery(e.results[0][0].transcript);
+    recognition.onresult = (e: any) => {
+      setSearchQuery(e.results[0][0].transcript);
+      setTimeout(() => fetchResults(), 0);
+    };
     recognition.start();
-  }, []);
+  }, [fetchResults]);
 
   // Filter States
   const [minRating, setMinRating] = useState(0);
@@ -106,7 +195,7 @@ export default function DashboardPage() {
 
   const handleCompareDetails = (item: any) => {
     localStorage.setItem("comparison_item", JSON.stringify(item));
-    setActiveTab("compare");
+    router.push(`/item/${encodeURIComponent(item.id)}`);
   };
 
   // --- Updated: Async Comment Handler with API Call ---
@@ -118,30 +207,21 @@ export default function DashboardPage() {
   const saveComment = async (text: string, rating: number) => {
     if (!activeCommentItem) return;
 
-    // 1. Construct Payload according to schema
     const payload = {
       entity_id: activeCommentItem.id,
       entity_type: activeCommentItem.category || "service",
       name: activeCommentItem.name,
       rating: rating,
       review: text,
-      user_name: "Anonymous User", // You can replace this with actual user data if available
-      metadata: {
-        additionalProp1: {}
-      }
+      user_name: "Anonymous User",
+      metadata: { additionalProp1: {} }
     };
 
     try {
       // 2. Call the API
-      const response = await fetch('/api/reviews', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await apiPost<any>('/api/reviews', payload);
 
-      if (response.ok) {
+      if (response) {
         // 3. Update Local State on Success
         const newReview = {
           text,
@@ -154,11 +234,9 @@ export default function DashboardPage() {
         }));
         toast.success("Review submitted successfully!");
       } else {
-        console.error("Failed to submit review:", response.statusText);
         toast.error("Failed to submit review. Please try again.");
       }
     } catch (error) {
-      console.error("Error submitting review:", error);
       toast.error("An error occurred while submitting your review.");
     }
   };
@@ -166,17 +244,30 @@ export default function DashboardPage() {
   const filteredItems = useMemo(() => {
     const query = searchQuery.toLowerCase().trim();
     const street = streetQuery.toLowerCase().trim();
-    let baseItems = activeTab === "favorites" ? API_DATA.filter(item => favorites.includes(item.id)) : API_DATA;
+    let baseItems = activeTab === "favorites" ? results.filter(item => favorites.includes(item.id)) : results;
     return baseItems.filter(item => {
-      return (item.name.toLowerCase().includes(query) || item.address.toLowerCase().includes(query)) &&
-             (selectedType === "all" || item.category === selectedType) &&
-             item.rating >= minRating &&
-             (!onlyOpen || item.open_now) &&
-             item.price <= maxPrice &&
-             item.distance <= maxDistance &&
-             (street === "" || item.address.toLowerCase().includes(street));
+      const name = (item.name || "").toLowerCase();
+      const address = (item.address || "").toLowerCase();
+      const price = item.price ?? 0;
+      const distance = item.distance ?? 0;
+      const rating = item.rating ?? 0;
+      const open = item.open_now ?? false;
+      const matchesQuery = mode ? true : (name.includes(query) || address.includes(query));
+      const typeMatch = mode ? true : (selectedType === "all" || item.category === selectedType);
+      if (mode) {
+        return matchesQuery && typeMatch;
+      }
+      return matchesQuery &&
+             typeMatch &&
+             rating >= minRating &&
+             (!onlyOpen || open) &&
+             price <= maxPrice &&
+             distance <= maxDistance &&
+             (street === "" || address.includes(street));
     }).sort((a, b) => b.score - a.score);
-  }, [searchQuery, selectedType, minRating, onlyOpen, maxPrice, maxDistance, streetQuery, activeTab, favorites]);
+  }, [searchQuery, selectedType, minRating, onlyOpen, maxPrice, maxDistance, streetQuery, activeTab, favorites, mode, results]);
+
+  const visibleItems = mode ? (filteredItems.length ? filteredItems : results) : filteredItems;
 
   return (
     <div className={`h-screen w-full bg-[#f8fcfc] text-[#2B2D42] ${inter.className} flex overflow-hidden`}>
@@ -204,8 +295,25 @@ export default function DashboardPage() {
           <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-4 items-center">
             <div className="flex-1 relative w-full group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input type="text" placeholder={placeholders[currentPlaceholder]} className="w-full pl-12 pr-14 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-[#0d7377] transition-all font-medium" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              <input
+                type="text"
+                placeholder={placeholders[currentPlaceholder]}
+                className="w-full pl-12 pr-14 py-3 bg-slate-50 border-none rounded-2xl focus:ring-2 focus:ring-[#0d7377] transition-all font-medium"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    fetchResults();
+                  }
+                }}
+              />
               <button onClick={startListening} className={`absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full transition-all duration-300 ${isListening ? 'text-red-500 bg-red-100 scale-110 shadow-md' : 'text-slate-400 hover:text-[#0d7377] hover:bg-slate-100'}`}><Mic size={20} className={isListening ? "animate-pulse" : ""} /></button>
+              {isLoadingResults && (
+                <div className="absolute right-14 top-1/2 -translate-y-1/2">
+                  <div className="w-5 h-5 rounded-full border-2 border-[#0d7377] border-t-transparent animate-spin" />
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <button onClick={() => setFilterDrawerOpen(true)} className="flex items-center gap-2 px-5 py-3 bg-white border border-slate-200 rounded-2xl font-semibold text-slate-600 hover:border-[#ff6b6b] hover:text-[#ff6b6b] transition-all"><SlidersHorizontal size={18} /> Filters</button>
@@ -230,11 +338,11 @@ export default function DashboardPage() {
                     <h2 className={`text-3xl font-bold text-[#0d7377] ${dmSans.className}`}>{activeTab === "favorites" ? "Your Favorites" : "Find, Compare, Decide"}</h2>
                     <p className="text-slate-500 font-medium mt-1">Showing verified data for San Francisco area</p>
                   </div>
-                  <div className="bg-[#ff6b6b]/10 text-[#ff6b6b] px-4 py-2 rounded-xl text-sm font-black tracking-wide">{filteredItems.length} RESULTS</div>
+                  <div className="bg-[#ff6b6b]/10 text-[#ff6b6b] px-4 py-2 rounded-xl text-sm font-black tracking-wide">{visibleItems.length} RESULTS</div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   <AnimatePresence mode="popLayout">
-                    {filteredItems.map((item) => (
+                    {visibleItems.map((item) => (
                       <ItemCard 
                         key={item.id} 
                         item={item} 
@@ -249,7 +357,7 @@ export default function DashboardPage() {
                 </div>
               </>
             )}
-            {activeTab === 'compare' && <CompareSection data={API_DATA} />}
+            {activeTab === 'compare' && <CompareSection data={results} />}
           </div>
         </main>
       </div>
@@ -265,17 +373,35 @@ export default function DashboardPage() {
                 <button onClick={()=>setFilterDrawerOpen(false)} className="p-2 bg-slate-50 text-slate-400 rounded-full hover:text-[#ff6b6b] transition-colors"><X size={20}/></button>
               </div>
               <div className="space-y-8 flex-1">
-                {/* Filter Inputs */}
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Street / Area</label>
-                  <input type="text" className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm outline-none" value={streetQuery} onChange={(e) => setStreetQuery(e.target.value)} />
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Location</label>
+                  <input type="text" placeholder="e.g. Sutter Street" className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm focus:ring-1 focus:ring-[#0d7377] outline-none" value={streetQuery} onChange={(e) => setStreetQuery(e.target.value)} />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Max Price (${maxPrice})</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-4">Rating</label>
+                  <div className="flex gap-2">
+                    {[0, 3, 4, 4.5].map(r => (
+                      <button key={r} onClick={() => setMinRating(r)} className={`flex-1 py-3 rounded-xl border font-bold text-xs transition-all ${minRating === r ? "bg-[#0d7377] border-[#0d7377] text-white" : "bg-white border-slate-200"}`}>{r === 0 ? "Any" : `${r}+`} <Star size={10} className="inline ml-1 mb-1" /></button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Price (${maxPrice})</label>
                   <input type="range" min="50" max="1000" step="10" className="w-full accent-[#0d7377]" value={maxPrice} onChange={(e) => setMaxPrice(Number(e.target.value))} />
                 </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Distance ({maxDistance} KM)</label>
+                  <input type="range" min="0.005" max="0.05" step="0.005" className="w-full accent-[#0d7377]" value={maxDistance} onChange={(e) => setMaxDistance(Number(e.target.value))} />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Availability</label>
+                  <button onClick={() => setOnlyOpen(!onlyOpen)} className={`w-full p-4 rounded-2xl border-2 flex justify-between items-center transition-all ${onlyOpen ? "border-[#0d7377] bg-[#0d7377]/5" : "border-slate-100"}`}>
+                    <span className="font-bold text-slate-700">Open Now</span>
+                    <div className={`w-10 h-5 rounded-full relative ${onlyOpen ? "bg-[#0d7377]" : "bg-slate-200"}`}><div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${onlyOpen ? "right-1" : "left-1"}`} /></div>
+                  </button>
+                </div>
               </div>
-              <button onClick={()=>setFilterDrawerOpen(false)} className="w-full py-4 bg-[#ff6b6b] text-white rounded-2xl font-black tracking-widest shadow-xl mt-6">APPLY FILTERS</button>
+              <button onClick={()=>setFilterDrawerOpen(false)} className="w-full py-4 bg-[#ff6b6b] text-white rounded-2xl font-black tracking-widest shadow-xl shadow-[#ff6b6b]/20 hover:scale-[1.02] active:scale-[0.98] transition-all shrink-0 mt-6">APPLY FILTERS</button>
             </motion.div>
           </>
         )}
@@ -307,11 +433,7 @@ function CompareSection({ data }: { data: any[] }) {
   };
 
   const comparisonData = useMemo(() => {
-    return selectedIds.map(id => {
-      const basic = data.find(r => r.id === id);
-      const detailed = DETAILED_MAPPING[id] || DETAILED_MAPPING["default"];
-      return { ...basic, ...detailed };
-    });
+    return selectedIds.map(id => data.find(r => r.id === id)).filter(Boolean);
   }, [selectedIds, data]);
 
   const bestProduct = useMemo(() => {
@@ -345,7 +467,7 @@ function CompareSection({ data }: { data: any[] }) {
             {data.map((item) => (
               <motion.div key={item.id} variants={itemVariants} onClick={() => toggleSelection(item.id)} whileHover={{ y: -5 }} className={`relative cursor-pointer rounded-[24px] p-3 border-2 transition-all duration-300 bg-white shadow-sm hover:shadow-xl ${selectedIds.includes(item.id) ? "border-[#0d7377] ring-4 ring-[#0d7377]/10" : "border-transparent hover:border-slate-200"}`}>
                 <div className="relative h-40 rounded-[20px] bg-slate-100 mb-3 overflow-hidden group">
-                  <img src={item.img} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={item.name} />
+                  <img src={item.img || item.thumbnail} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt={item.name} />
                   <div className="absolute top-2 left-2 bg-white/95 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-sm">
                     <Star size={10} className="fill-[#0d7377] text-[#0d7377]" /> {item.rating}
                   </div>
@@ -370,34 +492,95 @@ function CompareSection({ data }: { data: any[] }) {
         )}
 
         {viewMode === "comparison" && (
-          <motion.div key="comparison-view" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white rounded-[40px] shadow-2xl shadow-[#0d7377]/10 border border-slate-100 overflow-hidden">
-            <div className="grid grid-cols-4 bg-slate-50/50 border-b border-slate-100">
-              <div className="p-6 md:p-8 flex items-center justify-center md:justify-start"><div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100"><Activity className="text-[#0d7377]" /></div></div>
-              {comparisonData.map((item, idx) => (
-                <div key={idx} className="p-6 md:p-8 border-l border-slate-100 text-center relative group">
-                  <img src={item.img} className="w-12 h-12 rounded-full object-cover mx-auto mb-3 border-2 border-white shadow-md" alt={item.name} />
-                  <h4 className="font-bold text-[#2B2D42] text-sm md:text-base leading-tight">{item.name}</h4>
-                  {item === bestProduct && <span className="absolute top-4 right-4 bg-[#ff6b6b] text-white text-[9px] font-black px-2 py-1 rounded-md uppercase tracking-wide animate-pulse">Best Choice</span>}
+          // --- UPDATED COMPARISON LAYOUT: SPLIT VIEW ---
+          <motion.div 
+            key="comparison-view" 
+            initial={{ opacity: 0, scale: 0.95 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            exit={{ opacity: 0, scale: 0.95 }} 
+            className="flex flex-col xl:flex-row gap-6 items-start"
+          >
+            {/* LEFT SIDE: COMPARISON TABLE (Takes majority space) */}
+            <div className="flex-1 w-full bg-white rounded-[40px] shadow-2xl shadow-[#0d7377]/5 border border-slate-100 overflow-hidden">
+                <div className="grid grid-cols-4 bg-slate-50/50 border-b border-slate-100">
+                    <div className="p-6 md:p-8 flex items-center justify-center md:justify-start">
+                        <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
+                            <Activity className="text-[#0d7377]" />
+                        </div>
+                    </div>
+                    {comparisonData.map((item, idx) => (
+                        <div key={idx} className="p-6 md:p-8 border-l border-slate-100 text-center relative group">
+                            <img src={item.img} className="w-16 h-16 rounded-full object-cover mx-auto mb-3 border-4 border-white shadow-md transition-transform group-hover:scale-110" alt={item.name} />
+                            <h4 className="font-bold text-[#2B2D42] text-sm md:text-base leading-tight mb-2">{item.name}</h4>
+                            {item === bestProduct && (
+                                <span className="inline-block bg-[#ff6b6b] text-white text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-wide shadow-lg shadow-[#ff6b6b]/30 animate-pulse">
+                                    Best Choice
+                                </span>
+                            )}
+                        </div>
+                    ))}
                 </div>
-              ))}
-            </div>
-            <div className="divide-y divide-slate-50">
-              <CompareRow label="System Score" icon={<TrendingUp size={16}/>} data={comparisonData.map(d => d.score ? `${d.score.toFixed(1)} / 110` : "N/A")} highlight={true} />
-              <CompareRow label="Patient Trust" icon={<Star size={16}/>} data={comparisonData.map(d => `${d.user_ratings_total} verified reviews`)} />
-              <CompareRow label="Proximity" icon={<Navigation size={16}/>} data={comparisonData.map(d => `${d.distance} KM away`)} />
-              <CompareRow label="Video Insights" icon={<Youtube size={16}/>} data={comparisonData.map(d => d.youtube_summary)} />
-              <CompareRow label="Recent Feedback" icon={<MessageSquare size={16}/>} data={comparisonData.map(d => d.top_review)} />
-              <CompareRow label="Website" icon={<Globe size={16}/>} data={comparisonData.map(d => d.website)} />
-            </div>
-            <div className="p-8 md:p-10 bg-gradient-to-br from-[#0d7377] to-[#0a5c5f] text-white relative overflow-hidden">
-              <div className="relative z-10 flex flex-col md:flex-row items-start gap-6">
-                <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center shrink-0 backdrop-blur-sm border border-white/10"><TrendingUp size={28} className="text-white" /></div>
-                <div>
-                  <h3 className="text-xl md:text-2xl font-bold mb-2 flex items-center gap-2">ComparatorX Recommendation <span className="bg-white/20 text-[10px] px-2 py-1 rounded-md font-black uppercase tracking-wider">AI Generated</span></h3>
-                  {bestProduct && <p className="text-white/90 leading-relaxed font-medium text-sm md:text-base max-w-3xl">After analyzing transcripts, sentiment, and hard metrics, <span className="text-white font-bold underline decoration-2 decoration-[#ff6b6b] underline-offset-4">{bestProduct.name}</span> emerges as the superior choice.</p>}
+                <div className="divide-y divide-slate-50">
+                    <CompareRow label="System Score" icon={<TrendingUp size={16}/>} data={comparisonData.map(d => d.score ? `${d.score.toFixed(1)} / 110` : "N/A")} highlight={true} />
+                    <CompareRow label="Reviews" icon={<Star size={16}/>} data={comparisonData.map(d => `${d.user_ratings_total || d.reviews || 0} reviews`)} />
+                    <CompareRow label="Distance" icon={<Navigation size={16}/>} data={comparisonData.map(d => d.distance !== undefined ? `${d.distance} KM away` : "N/A")} />
+                    <CompareRow label="Source" icon={<Globe size={16}/>} data={comparisonData.map(d => d.address || d.source || "N/A")} />
                 </div>
-              </div>
             </div>
+
+            {/* RIGHT SIDE: RECOMMENDATION PANEL (Sticky sidebar) */}
+            {bestProduct && (
+                <motion.div 
+                    initial={{ x: 50, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="w-full xl:w-80 shrink-0 sticky top-8"
+                >
+                    <div className="bg-gradient-to-br from-[#0d7377] to-[#094c4f] rounded-[32px] p-8 text-white shadow-2xl shadow-[#0d7377]/20 relative overflow-hidden">
+                        {/* Background Decor */}
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10" />
+                        <div className="absolute bottom-0 left-0 w-24 h-24 bg-[#ff6b6b]/20 rounded-full blur-2xl -ml-10 -mb-10" />
+
+                        <div className="relative z-10">
+                            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-6 border border-white/10">
+                                <Trophy size={24} className="text-white" />
+                            </div>
+
+                            <h3 className="text-xl font-bold mb-1">ComparatorX Insight</h3>
+                            <div className="flex items-center gap-2 mb-6">
+                                <span className="w-2 h-2 bg-[#ff6b6b] rounded-full animate-pulse" />
+                                <span className="text-[10px] font-bold uppercase tracking-widest opacity-70">AI Generated Analysis</span>
+                            </div>
+
+                            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 mb-6 border border-white/5">
+                                <div className="flex items-center gap-3 mb-3">
+                                    <img src={bestProduct.img} className="w-10 h-10 rounded-full object-cover border-2 border-white/50" alt={bestProduct.name} />
+                                    <div>
+                                        <p className="text-xs font-bold opacity-80">Winner</p>
+                                        <p className="text-sm font-bold leading-tight">{bestProduct.name}</p>
+                                    </div>
+                                </div>
+                                <div className="h-px w-full bg-white/10 mb-3" />
+                                <div className="flex justify-between items-center text-xs font-medium">
+                                    <span>Match Score</span>
+                                    <span className="bg-white text-[#0d7377] px-2 py-0.5 rounded text-[10px] font-black">{bestProduct.score.toFixed(1)}</span>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="flex gap-3">
+                                    <Quote size={16} className="text-[#ff6b6b] shrink-0 mt-1" />
+                                    <p className="text-sm leading-relaxed text-white/90 font-medium">
+                                        Selected for highest proximity score and verified patient trust. This professional consistently outperforms in localized sentiment analysis.
+                                    </p>
+                                </div>
+                            </div>
+
+                            
+                        </div>
+                    </div>
+                </motion.div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -485,7 +668,7 @@ function CommentModal({ isOpen, onClose, item, comments, onSave }: any) {
                   onSave(newComment, rating);
                   setNewComment("");
                   setRating(0);
-                  onClose(); // Automatically close on Enter submit
+                  onClose(); 
                 }
               }}
             />
@@ -495,7 +678,7 @@ function CommentModal({ isOpen, onClose, item, comments, onSave }: any) {
                   onSave(newComment, rating);
                   setNewComment("");
                   setRating(0);
-                  onClose(); // Automatically close on Click submit
+                  onClose(); 
                 }
               }} 
               disabled={!newComment.trim() || rating === 0}
@@ -515,10 +698,25 @@ function CommentModal({ isOpen, onClose, item, comments, onSave }: any) {
 }
 
 function ItemCard({ item, isFavorite, onFavoriteToggle, onDetailsClick, onCommentClick, hasComments }: any) {
+  const [imgError, setImgError] = useState(false);
+  const imgSrc = item.img || item.thumbnail || "";
+  const showFallback = imgError || !imgSrc;
   return (
     <motion.div layout initial={{opacity:0, scale:0.9}} animate={{opacity:1, scale:1}} exit={{opacity:0, scale:0.9}} className="bg-white rounded-[32px] border border-slate-100 p-4 shadow-sm hover:shadow-xl hover:shadow-[#0d7377]/10 transition-all flex flex-col group relative">
       <div className="relative h-44 rounded-[24px] overflow-hidden mb-4">
-        <img src={item.img} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={item.name} />
+        {!showFallback ? (
+          <img
+            src={imgSrc}
+            loading="lazy"
+            onError={() => setImgError(true)}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+            alt={item.name}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-[#0d7377]/10 to-[#ff6b6b]/10 text-[#0d7377] font-black text-3xl">
+            {(item.name || "?").slice(0, 1).toUpperCase()}
+          </div>
+        )}
         <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-sm border border-slate-100">
           <Star size={12} className="text-[#0d7377] fill-[#0d7377]" />
           <span className="text-xs font-black text-[#0d7377]">{item.rating}</span>
